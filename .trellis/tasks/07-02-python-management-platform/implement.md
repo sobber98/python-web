@@ -30,7 +30,7 @@
 - Confirm each app gets a separate venv, log file, and process state.
 - Confirm dependency install failures are visible in the UI and do not falsely show running status.
 - Confirm platform restart attempts to restore apps with `desired_running = true`.
-- Confirm Docker Compose production deployment mounts `config.toml` and persists `data/`.
+- Confirm Docker Compose production deployment pulls the GHCR image, mounts `config.toml`, and persists `data/`.
 - Confirm CI logs in to GHCR and pushes the Docker image to GitHub Packages.
 
 ## Rollback Points

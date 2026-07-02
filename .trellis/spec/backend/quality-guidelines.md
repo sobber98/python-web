@@ -83,7 +83,7 @@ Normalize package keys and let manual dependency lines replace inferred entries 
 
 ### 5. Good/Base/Bad Cases
 
-- Good: compose mounts config read-only and data as a named volume.
+- Good: production compose pulls the published GHCR image, mounts config read-only, and stores data in a named volume.
 - Base: local `docker build` completes and app imports with a mounted config.
 - Bad: bake real `config.toml`, `data/`, or `.venv/` into the image.
 
@@ -136,4 +136,4 @@ Ignore local secrets in `.dockerignore`, mount `config.toml` read-only, persist 
 - `desired_running` changes match operator intent.
 - Dependency install failure is visible to users and does not leave status as running.
 - Logs are per-app and tail-bounded.
-- Docker deployment preserves `/app/data` and mounts `config.toml` read-only.
+- Docker deployment uses the published GHCR image, preserves `/app/data`, and mounts `config.toml` read-only.

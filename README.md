@@ -64,12 +64,11 @@ docker run --rm \
 ```bash
 cp config.example.toml config.toml
 # edit config.toml and set strong admin_password and secret_key
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-The production compose file mounts `config.toml` read-only and stores uploaded apps, per-app virtual environments, SQLite data, and logs in the `python-manager-data` Docker volume.
-
-To deploy an image already published to GitHub Packages, set the image in `docker-compose.prod.yml` to `ghcr.io/sobber98/python-management-platform:latest` and remove or ignore the `build` section.
+The production compose file pulls `ghcr.io/sobber98/python-management-platform:latest`, mounts `config.toml` read-only, and stores uploaded apps, per-app virtual environments, SQLite data, and logs in the `python-manager-data` Docker volume.
 
 Stop the deployment:
 

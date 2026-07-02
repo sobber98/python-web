@@ -72,7 +72,7 @@
 
 - `Dockerfile` builds a production image for the FastAPI platform.
 - `.dockerignore` excludes local runtime data, virtual environments, git metadata, caches, and local secrets.
-- `docker-compose.prod.yml` documents production deployment with persistent `data` volume and local `config.toml` bind mount.
+- `docker-compose.prod.yml` documents production deployment from the published GHCR image with persistent `data` volume and local `config.toml` bind mount.
 - `.github/workflows/ci.yml` installs dependencies, runs tests, builds the Docker image, and pushes it to GitHub Packages / GHCR.
 
 ## Trade-Offs

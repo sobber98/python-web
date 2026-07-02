@@ -1,8 +1,6 @@
 services:
   python-manager:
-    build:
-      context: .
-    image: python-management-platform:latest
+    image: ghcr.io/sobber98/python-management-platform:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
