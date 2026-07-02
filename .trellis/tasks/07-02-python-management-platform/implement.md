@@ -20,6 +20,7 @@
 - `python -m compileall .`
 - `python -m pytest` if tests are added.
 - `docker build -t python-management-platform:local .` if Docker is available.
+- Render `/login` through a FastAPI test client to catch Starlette/Jinja template signature regressions.
 - Manual smoke test: start the platform, log in, create an app, upload a simple script that prints periodically, confirm logs update, re-upload replacement script, confirm only that app restarts.
 
 ## Review Gates

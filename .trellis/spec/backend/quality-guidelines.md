@@ -103,6 +103,54 @@ Copy `config.toml` into the Docker image and run as root with ephemeral `/app/da
 
 Ignore local secrets in `.dockerignore`, mount `config.toml` read-only, persist `/app/data`, and run the process as the non-root `manager` user.
 
+## Scenario: FastAPI Template Rendering
+
+### 1. Scope / Trigger
+
+- Trigger: page routes cross FastAPI, Starlette, Jinja templates, and packaged static/template files.
+
+### 2. Signatures
+
+- `templates.TemplateResponse(request, "template.html", context)`
+- `Jinja2Templates(directory=APP_DIR / "templates")`
+- `StaticFiles(directory=APP_DIR / "static")`
+
+### 3. Contracts
+
+- Use the current Starlette `TemplateResponse(request, name, context)` calling convention.
+- Resolve template/static directories relative to `app/main.py`, not the process current working directory.
+- Page routes must render successfully in the Docker working directory and in tests that change `cwd`.
+
+### 4. Validation & Error Matrix
+
+- Old positional signature `TemplateResponse("login.html", {"request": request})` -> can raise `TypeError: unhashable type: 'dict'` on current Starlette.
+- Relative `app/templates` path from `cwd` -> can fail when the process starts outside the repository root.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `TemplateResponse(request, "login.html", {"error": ""})`.
+- Base: login page returns 200 and contains `Admin password`.
+- Bad: passing request inside context while also using old positional argument order.
+
+### 6. Tests Required
+
+- Render `/login` through FastAPI `TestClient`.
+- Test after changing `cwd` away from the repository root.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+templates.TemplateResponse("login.html", {"request": request, "error": ""})
+```
+
+#### Correct
+
+```python
+templates.TemplateResponse(request, "login.html", {"error": ""})
+```
+
 ---
 
 ## Forbidden Patterns
@@ -119,6 +167,7 @@ Ignore local secrets in `.dockerignore`, mount `config.toml` read-only, persist 
 - Use per-app virtual environments and runtime directories.
 - Stop a running app before overwriting its `main.py` during re-upload.
 - Keep production Docker images free of local secrets and runtime data.
+- Explicitly limit setuptools package discovery to `app*` so runtime `data/` is never treated as a Python package.
 
 ---
 
@@ -137,3 +186,4 @@ Ignore local secrets in `.dockerignore`, mount `config.toml` read-only, persist 
 - Dependency install failure is visible to users and does not leave status as running.
 - Logs are per-app and tail-bounded.
 - Docker deployment uses the published GHCR image, preserves `/app/data`, and mounts `config.toml` read-only.
+- Template rendering works with current Starlette and does not depend on the process working directory.

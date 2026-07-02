@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -17,16 +18,19 @@ from app.process_manager import ProcessManager
 settings = load_settings()
 repo = AppRepository(settings.db_path)
 manager = ProcessManager(repo, settings.data_dir)
-
-app = FastAPI(title="Python Management Platform")
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site="lax")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+APP_DIR = Path(__file__).resolve().parent
 
 
-@app.on_event("startup")
-def restore_running_apps() -> None:
+@asynccontextmanager
+async def lifespan(_: FastAPI):
     manager.restore_desired()
+    yield
+
+
+app = FastAPI(title="Python Management Platform", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site="lax")
+app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=APP_DIR / "templates")
 
 
 def is_authenticated(request: Request) -> bool:
@@ -56,7 +60,7 @@ async def redirect_unauthenticated(request: Request, exc: HTTPException):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("login.html", {"request": request, "error": ""})
+    return templates.TemplateResponse(request, "login.html", {"error": ""})
 
 
 @app.post("/login")
@@ -64,7 +68,7 @@ async def login(request: Request, password: str = Form(...)) -> Response:
     if password == settings.admin_password:
         request.session["authenticated"] = True
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid password"}, status_code=401)
+    return templates.TemplateResponse(request, "login.html", {"error": "Invalid password"}, status_code=401)
 
 
 @app.post("/logout")
@@ -78,8 +82,9 @@ def dashboard(request: Request, _: None = Depends(require_page_auth)) -> HTMLRes
     apps = repo.list_apps()
     selected = apps[0] if apps else None
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
-        {"request": request, "apps": apps, "selected": selected, "logs": manager.read_log_tail(selected) if selected else ""},
+        {"apps": apps, "selected": selected, "logs": manager.read_log_tail(selected) if selected else ""},
     )
 
 
@@ -89,8 +94,9 @@ def app_detail(request: Request, app_id: int, _: None = Depends(require_page_aut
     if selected is None:
         raise HTTPException(status_code=404, detail="App not found")
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
-        {"request": request, "apps": repo.list_apps(), "selected": selected, "logs": manager.read_log_tail(selected)},
+        {"apps": repo.list_apps(), "selected": selected, "logs": manager.read_log_tail(selected)},
     )
 
 
