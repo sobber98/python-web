@@ -60,7 +60,7 @@ The page should feel modern and usable on desktop and mobile.
 - [ ] The administrator password and runtime paths are configurable through a local configuration file.
 - [ ] A Docker image can be built for the platform.
 - [ ] A production deployment path is documented using Docker Compose with persistent runtime data and local config mounting.
-- [ ] A workflow runs tests and builds the Docker image.
+- [ ] A workflow runs tests, builds the Docker image, and pushes the built image to GitHub Packages / GHCR.
 
 ## Out of Scope Candidate Items
 

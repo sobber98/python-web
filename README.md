@@ -34,6 +34,19 @@ Build the production image locally:
 docker build -t python-management-platform:local .
 ```
 
+GitHub Actions pushes images to GitHub Packages / GHCR on `master` and `main` pushes:
+
+```text
+ghcr.io/sobber98/python-management-platform:latest
+ghcr.io/sobber98/python-management-platform:<commit-sha>
+```
+
+Pull a published image:
+
+```bash
+docker pull ghcr.io/sobber98/python-management-platform:latest
+```
+
 Run it with local config and persistent runtime data:
 
 ```bash
@@ -55,6 +68,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 The production compose file mounts `config.toml` read-only and stores uploaded apps, per-app virtual environments, SQLite data, and logs in the `python-manager-data` Docker volume.
+
+To deploy an image already published to GitHub Packages, set the image in `docker-compose.prod.yml` to `ghcr.io/sobber98/python-management-platform:latest` and remove or ignore the `build` section.
 
 Stop the deployment:
 

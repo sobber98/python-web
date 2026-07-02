@@ -12,7 +12,7 @@
 8. Implement API routes for app CRUD, upload, controls, status, and log tail.
 9. Implement responsive management UI: login, app list, app detail, upload/manual dependency form, controls, status indicators, inferred dependencies, and logs.
 10. Add tests for dependency inference, persistence/state transitions, and process manager behavior where feasible.
-11. Add Docker build artifacts, production Docker Compose deployment, and CI workflow that tests and builds the image.
+11. Add Docker build artifacts, production Docker Compose deployment, and CI workflow that tests, builds the image, and pushes it to GitHub Packages / GHCR.
 12. Run formatting/lint/tests and perform a manual smoke test with a simple uploaded Python script.
 
 ## Validation Commands
@@ -31,6 +31,7 @@
 - Confirm dependency install failures are visible in the UI and do not falsely show running status.
 - Confirm platform restart attempts to restore apps with `desired_running = true`.
 - Confirm Docker Compose production deployment mounts `config.toml` and persists `data/`.
+- Confirm CI logs in to GHCR and pushes the Docker image to GitHub Packages.
 
 ## Rollback Points
 

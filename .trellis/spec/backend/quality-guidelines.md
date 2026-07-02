@@ -90,7 +90,7 @@ Normalize package keys and let manual dependency lines replace inferred entries 
 ### 6. Tests Required
 
 - CI must run pytest and compileall.
-- CI must build the Docker image.
+- CI must build the Docker image and push it to GitHub Packages / GHCR on push events.
 - Local smoke should import `app.main` with a generated `config.toml` before deployment.
 
 ### 7. Wrong vs Correct
