@@ -1,35 +1,36 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Python Manager</title>
+  <title>Python 管理平台</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">Trusted admin console</p>
-      <h1>Python app manager</h1>
+      <p class="eyebrow">可信管理员控制台</p>
+      <h1>Python 应用管理</h1>
     </div>
-    <form method="post" action="/logout"><button class="ghost" type="submit">Log out</button></form>
+    <form method="post" action="/logout"><button class="ghost" type="submit">退出登录</button></form>
   </header>
 
   <main class="layout">
     <aside class="panel app-list">
-      <h2>Apps</h2>
+      <h2>应用</h2>
       <form method="post" action="/apps" class="create-form">
-        <input name="name" placeholder="New app name" required>
-        <button type="submit">Create</button>
+        <input name="name" placeholder="新应用名称" required>
+        <button type="submit">创建</button>
       </form>
+      {% set status_labels = {'new': '未配置', 'installing': '安装中', 'starting': '启动中', 'running': '运行中', 'stopped': '已停止', 'error': '错误'} %}
       <nav>
         {% for app in apps %}
           <a class="app-row {% if selected and app.id == selected.id %}active{% endif %}" href="/apps/{{ app.id }}">
             <span>{{ app.name }}</span>
-            <small class="status {{ app.status }}">{{ app.status }}</small>
+            <small class="status {{ app.status }}">{{ status_labels.get(app.status, app.status) }}</small>
           </a>
         {% else %}
-          <p class="muted">Create an app to upload your first Python file.</p>
+          <p class="muted">创建应用后即可上传第一个 Python 文件。</p>
         {% endfor %}
       </nav>
     </aside>
@@ -40,47 +41,47 @@
         <div>
           <p class="eyebrow">{{ selected.slug }}</p>
           <h2>{{ selected.name }}</h2>
-          <p class="muted">PID: {{ selected.pid or 'not running' }} · desired: {{ 'running' if selected.desired_running else 'stopped' }}</p>
+          <p class="muted">进程 ID：{{ selected.pid or '未运行' }} · 期望状态：{{ '运行中' if selected.desired_running else '已停止' }}</p>
           {% if selected.last_error %}<p class="error">{{ selected.last_error }}</p>{% endif %}
         </div>
-        <span id="status-pill" class="pill {{ selected.status }}">{{ selected.status }}</span>
+        <span id="status-pill" class="pill {{ selected.status }}">{{ status_labels.get(selected.status, selected.status) }}</span>
       </article>
 
       <div class="grid">
         <article class="panel">
-          <h3>Upload and dependencies</h3>
+          <h3>上传与依赖</h3>
           <form method="post" action="/apps/{{ selected.id }}/upload" enctype="multipart/form-data" class="stack">
             <label>
-              Python file
+              Python 文件
               <input type="file" name="file" accept=".py" required>
             </label>
             <label>
-              Manual dependencies
+              手动依赖
               <textarea name="manual_dependencies" rows="6" placeholder="requests==2.32.3&#10;beautifulsoup4">{{ selected.manual_dependencies }}</textarea>
             </label>
-            <button type="submit">Upload, install, restart</button>
+            <button type="submit">上传、安装并重启</button>
           </form>
         </article>
 
         <article class="panel">
-          <h3>Controls</h3>
+          <h3>控制</h3>
           <div class="button-row">
-            <form method="post" action="/apps/{{ selected.id }}/start"><button type="submit">Start</button></form>
-            <form method="post" action="/apps/{{ selected.id }}/stop"><button class="secondary" type="submit">Stop</button></form>
-            <form method="post" action="/apps/{{ selected.id }}/restart"><button class="secondary" type="submit">Restart</button></form>
-            <form method="post" action="/apps/{{ selected.id }}/delete" onsubmit="return confirm('Delete this app?')"><button class="danger" type="submit">Delete</button></form>
+            <form method="post" action="/apps/{{ selected.id }}/start"><button type="submit">启动</button></form>
+            <form method="post" action="/apps/{{ selected.id }}/stop"><button class="secondary" type="submit">停止</button></form>
+            <form method="post" action="/apps/{{ selected.id }}/restart"><button class="secondary" type="submit">重启</button></form>
+            <form method="post" action="/apps/{{ selected.id }}/delete" onsubmit="return confirm('确定删除这个应用吗？')"><button class="danger" type="submit">删除</button></form>
           </div>
-          <h4>Inferred dependencies</h4>
+          <h4>推断依赖</h4>
           <div id="dependencies" class="chips">
-            {% for dep in selected.inferred_list %}<span>{{ dep }}</span>{% else %}<em>None yet</em>{% endfor %}
+            {% for dep in selected.inferred_list %}<span>{{ dep }}</span>{% else %}<em>暂无</em>{% endfor %}
           </div>
         </article>
       </div>
 
       <article class="panel logs-panel">
         <div class="section-title">
-          <h3>Logs</h3>
-          <button class="ghost" type="button" onclick="refreshLogs()">Refresh</button>
+          <h3>日志</h3>
+          <button class="ghost" type="button" onclick="refreshLogs()">刷新</button>
         </div>
         <pre id="logs">{{ logs }}</pre>
       </article>
@@ -91,7 +92,8 @@
           if (!response.ok) return;
           const data = await response.json();
           const pill = document.getElementById('status-pill');
-          pill.textContent = data.status;
+          const labels = {new: '未配置', installing: '安装中', starting: '启动中', running: '运行中', stopped: '已停止', error: '错误'};
+          pill.textContent = labels[data.status] || data.status;
           pill.className = `pill ${data.status}`;
         }
         async function refreshLogs() {
@@ -104,8 +106,8 @@
       </script>
       {% else %}
       <article class="panel empty-state">
-        <p class="eyebrow">No apps yet</p>
-        <h2>Create an app, upload a Python file, and keep it running.</h2>
+        <p class="eyebrow">暂无应用</p>
+        <h2>创建应用，上传 Python 文件，并让它保持后台运行。</h2>
       </article>
       {% endif %}
     </section>

@@ -21,4 +21,5 @@ def test_login_page_renders_with_current_starlette_signature(monkeypatch, tmp_pa
     response = client.get("/login")
 
     assert response.status_code == 200
-    assert "Admin password" in response.text
+    assert "管理员密码" in response.text
+    assert "进入控制台" in response.text
