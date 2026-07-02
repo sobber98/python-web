@@ -1,0 +1,10 @@
+# Copy this file to config.toml and edit local secrets before starting.
+
+admin_password = "change-me"
+
+# Optional. If omitted, sessions are invalidated on each server restart.
+secret_key = "replace-with-a-long-random-string"
+
+# Optional runtime paths.
+data_dir = "data"
+# db_path = "data/manager.db"

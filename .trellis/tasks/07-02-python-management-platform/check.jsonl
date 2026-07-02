@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Check backend implementation against project backend guidelines."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check code quality, tests, and forbidden-pattern expectations."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Check runtime/app log handling and sensitive-data logging risks."}
+{"file":".trellis/spec/frontend/index.md","reason":"Check responsive frontend implementation against project frontend guidelines."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check API/UI/database/runtime state contracts across layers."}

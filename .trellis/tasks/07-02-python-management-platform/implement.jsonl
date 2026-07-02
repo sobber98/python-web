@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend guidelines index for the FastAPI process-management implementation."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Quality expectations for backend code and tests."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Relevant because the platform captures and exposes app logs."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend guidelines index for the responsive management UI."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Feature spans database, service, API, templates, and process runtime state."}

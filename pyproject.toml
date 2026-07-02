@@ -1,0 +1,19 @@
+[project]
+name = "python-management-platform"
+version = "0.1.0"
+description = "Web platform for managing uploaded Python scripts."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "itsdangerous>=2.2",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

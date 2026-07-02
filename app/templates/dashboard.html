@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Python Manager</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Trusted admin console</p>
+      <h1>Python app manager</h1>
+    </div>
+    <form method="post" action="/logout"><button class="ghost" type="submit">Log out</button></form>
+  </header>
+
+  <main class="layout">
+    <aside class="panel app-list">
+      <h2>Apps</h2>
+      <form method="post" action="/apps" class="create-form">
+        <input name="name" placeholder="New app name" required>
+        <button type="submit">Create</button>
+      </form>
+      <nav>
+        {% for app in apps %}
+          <a class="app-row {% if selected and app.id == selected.id %}active{% endif %}" href="/apps/{{ app.id }}">
+            <span>{{ app.name }}</span>
+            <small class="status {{ app.status }}">{{ app.status }}</small>
+          </a>
+        {% else %}
+          <p class="muted">Create an app to upload your first Python file.</p>
+        {% endfor %}
+      </nav>
+    </aside>
+
+    <section class="workspace">
+      {% if selected %}
+      <article class="hero panel">
+        <div>
+          <p class="eyebrow">{{ selected.slug }}</p>
+          <h2>{{ selected.name }}</h2>
+          <p class="muted">PID: {{ selected.pid or 'not running' }} · desired: {{ 'running' if selected.desired_running else 'stopped' }}</p>
+          {% if selected.last_error %}<p class="error">{{ selected.last_error }}</p>{% endif %}
+        </div>
+        <span id="status-pill" class="pill {{ selected.status }}">{{ selected.status }}</span>
+      </article>
+
+      <div class="grid">
+        <article class="panel">
+          <h3>Upload and dependencies</h3>
+          <form method="post" action="/apps/{{ selected.id }}/upload" enctype="multipart/form-data" class="stack">
+            <label>
+              Python file
+              <input type="file" name="file" accept=".py" required>
+            </label>
+            <label>
+              Manual dependencies
+              <textarea name="manual_dependencies" rows="6" placeholder="requests==2.32.3&#10;beautifulsoup4">{{ selected.manual_dependencies }}</textarea>
+            </label>
+            <button type="submit">Upload, install, restart</button>
+          </form>
+        </article>
+
+        <article class="panel">
+          <h3>Controls</h3>
+          <div class="button-row">
+            <form method="post" action="/apps/{{ selected.id }}/start"><button type="submit">Start</button></form>
+            <form method="post" action="/apps/{{ selected.id }}/stop"><button class="secondary" type="submit">Stop</button></form>
+            <form method="post" action="/apps/{{ selected.id }}/restart"><button class="secondary" type="submit">Restart</button></form>
+            <form method="post" action="/apps/{{ selected.id }}/delete" onsubmit="return confirm('Delete this app?')"><button class="danger" type="submit">Delete</button></form>
+          </div>
+          <h4>Inferred dependencies</h4>
+          <div id="dependencies" class="chips">
+            {% for dep in selected.inferred_list %}<span>{{ dep }}</span>{% else %}<em>None yet</em>{% endfor %}
+          </div>
+        </article>
+      </div>
+
+      <article class="panel logs-panel">
+        <div class="section-title">
+          <h3>Logs</h3>
+          <button class="ghost" type="button" onclick="refreshLogs()">Refresh</button>
+        </div>
+        <pre id="logs">{{ logs }}</pre>
+      </article>
+      <script>
+        const appId = {{ selected.id }};
+        async function refreshStatus() {
+          const response = await fetch(`/api/apps/${appId}/status`);
+          if (!response.ok) return;
+          const data = await response.json();
+          const pill = document.getElementById('status-pill');
+          pill.textContent = data.status;
+          pill.className = `pill ${data.status}`;
+        }
+        async function refreshLogs() {
+          const response = await fetch(`/api/apps/${appId}/logs`);
+          if (!response.ok) return;
+          const data = await response.json();
+          document.getElementById('logs').textContent = data.logs || '';
+        }
+        setInterval(() => { refreshStatus(); refreshLogs(); }, 4000);
+      </script>
+      {% else %}
+      <article class="panel empty-state">
+        <p class="eyebrow">No apps yet</p>
+        <h2>Create an app, upload a Python file, and keep it running.</h2>
+      </article>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login | Python Manager</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <p class="eyebrow">Python Manager</p>
+    <h1>Control trusted Python apps from one clean console.</h1>
+    <form method="post" action="/login" class="stack">
+      <label>
+        Admin password
+        <input type="password" name="password" autofocus required>
+      </label>
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <button type="submit">Enter dashboard</button>
+    </form>
+  </main>
+</body>
+</html>
