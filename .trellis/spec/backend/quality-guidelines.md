@@ -151,6 +151,56 @@ templates.TemplateResponse("login.html", {"request": request, "error": ""})
 templates.TemplateResponse(request, "login.html", {"error": ""})
 ```
 
+## Scenario: Upload And Install Progress
+
+### 1. Scope / Trigger
+
+- Trigger: upload/install progress crosses browser upload events, FastAPI upload route, background process manager work, SQLite progress fields, status API, and dashboard rendering.
+
+### 2. Signatures
+
+- `AppRepository.set_progress(app_id, stage, percent, message) -> None`
+- `ProcessManager.start(app_id, install=True, progress=None) -> None`
+- API: `POST /apps/{app_id}/upload` returns JSON for XMLHttpRequest clients.
+- API: `GET /api/apps/{app_id}/status` includes `progress_stage`, `progress_percent`, and `progress_message`.
+
+### 3. Contracts
+
+- Browser upload progress is transfer progress only.
+- Backend progress is step-based: `upload_received`, `parsing`, `venv`, `installing`, `starting`, `complete`, or `failed`.
+- Do not parse pip percentage output for progress.
+- Failed install/start sets status `error` and progress stage `failed`.
+- Existing status enum values remain stable.
+
+### 4. Validation & Error Matrix
+
+- Invalid app id -> `404`.
+- Invalid file extension -> `400`.
+- Python syntax error -> status `error`, progress `failed`, visible Chinese progress message.
+- Dependency install failure -> status `error`, progress `failed`, pip output remains in `install.log`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: XHR upload reaches 100%, backend progress advances through step messages, then status becomes `running`.
+- Base: normal non-JS form submission redirects back to the app detail page.
+- Bad: keep the request blocked during pip install so the UI cannot poll progress.
+
+### 6. Tests Required
+
+- Assert progress fields default and update in SQLite.
+- Assert dashboard renders upload/install progress UI.
+- Assert status API includes progress fields when app exists.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+Parse pip output to infer exact percentage and block the upload request until install completes.
+
+#### Correct
+
+Return quickly for XHR uploads, run install/start in a background thread, and expose coarse progress through the authenticated status API.
+
 ---
 
 ## Forbidden Patterns
@@ -187,3 +237,4 @@ templates.TemplateResponse(request, "login.html", {"error": ""})
 - Logs are per-app and tail-bounded.
 - Docker deployment uses the published GHCR image, preserves `/app/data`, and mounts `config.toml` read-only.
 - Template rendering works with current Starlette and does not depend on the process working directory.
+- Upload/install progress is step-based and exposed through persisted status fields, not pip percentage parsing.

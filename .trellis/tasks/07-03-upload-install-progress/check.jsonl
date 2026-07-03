@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check backend progress/status/process contracts."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check managed_apps schema and progress state persistence."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Check upload progress UI behavior and rendering."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check data flow consistency across UI/API/database/runtime."}

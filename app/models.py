@@ -15,6 +15,9 @@ class ManagedApp:
     desired_running: bool
     pid: int | None
     last_error: str
+    progress_stage: str
+    progress_percent: int
+    progress_message: str
     created_at: str
     updated_at: str
 

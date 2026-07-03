@@ -29,6 +29,7 @@ The Python management platform uses SQLite through the standard `sqlite3` module
 - `manual_dependencies` and `inferred_dependencies` are newline-delimited text.
 - `desired_running` stores operator intent and is used for platform startup recovery.
 - `pid` is the current process group leader PID when running, otherwise null.
+- `progress_stage`, `progress_percent`, and `progress_message` store coarse upload/install/start progress for UI polling.
 
 ### 4. Validation & Error Matrix
 
@@ -48,6 +49,7 @@ The Python management platform uses SQLite through the standard `sqlite3` module
 - Assert duplicate display names receive unique slugs.
 - Assert upload/start status transitions persist in SQLite.
 - Assert stop clears `pid` and `desired_running`.
+- Assert progress defaults to `idle`/`0`/empty message and updates with bounded percentages.
 
 ### 7. Wrong vs Correct
 

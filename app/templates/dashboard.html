@@ -50,7 +50,7 @@
       <div class="grid">
         <article class="panel">
           <h3>上传与依赖</h3>
-          <form method="post" action="/apps/{{ selected.id }}/upload" enctype="multipart/form-data" class="stack">
+          <form id="upload-form" method="post" action="/apps/{{ selected.id }}/upload" enctype="multipart/form-data" class="stack">
             <label>
               Python 文件
               <input type="file" name="file" accept=".py" required>
@@ -61,6 +61,21 @@
             </label>
             <button type="submit">上传、安装并重启</button>
           </form>
+          <div id="upload-progress" class="progress-block" hidden>
+            <div class="progress-header">
+              <span>上传进度</span>
+              <strong id="upload-percent">0%</strong>
+            </div>
+            <div class="progress-track"><div id="upload-bar" class="progress-fill"></div></div>
+          </div>
+          <div id="install-progress" class="progress-block" {% if not selected.progress_message %}hidden{% endif %}>
+            <div class="progress-header">
+              <span>安装进度</span>
+              <strong id="install-percent">{{ selected.progress_percent }}%</strong>
+            </div>
+            <div class="progress-track"><div id="install-bar" class="progress-fill" style="width: {{ selected.progress_percent }}%"></div></div>
+            <p id="progress-message" class="muted">{{ selected.progress_message }}</p>
+          </div>
         </article>
 
         <article class="panel">
@@ -87,20 +102,75 @@
       </article>
       <script>
         const appId = {{ selected.id }};
+        const statusLabels = {new: '未配置', installing: '安装中', starting: '启动中', running: '运行中', stopped: '已停止', error: '错误'};
+        const uploadForm = document.getElementById('upload-form');
+        const uploadProgress = document.getElementById('upload-progress');
+        const uploadBar = document.getElementById('upload-bar');
+        const uploadPercent = document.getElementById('upload-percent');
+        const installProgress = document.getElementById('install-progress');
+        const installBar = document.getElementById('install-bar');
+        const installPercent = document.getElementById('install-percent');
+        const progressMessage = document.getElementById('progress-message');
+
+        function setUploadProgress(percent) {
+          const value = Math.max(0, Math.min(100, Math.round(percent)));
+          uploadProgress.hidden = false;
+          uploadBar.style.width = `${value}%`;
+          uploadPercent.textContent = `${value}%`;
+        }
+
+        function setInstallProgress(percent, message) {
+          const value = Math.max(0, Math.min(100, Math.round(percent || 0)));
+          installProgress.hidden = false;
+          installBar.style.width = `${value}%`;
+          installPercent.textContent = `${value}%`;
+          progressMessage.textContent = message || '';
+        }
+
         async function refreshStatus() {
           const response = await fetch(`/api/apps/${appId}/status`);
           if (!response.ok) return;
           const data = await response.json();
           const pill = document.getElementById('status-pill');
-          const labels = {new: '未配置', installing: '安装中', starting: '启动中', running: '运行中', stopped: '已停止', error: '错误'};
-          pill.textContent = labels[data.status] || data.status;
+          pill.textContent = statusLabels[data.status] || data.status;
           pill.className = `pill ${data.status}`;
+          if (data.progress_message) {
+            setInstallProgress(data.progress_percent, data.progress_message);
+          }
         }
         async function refreshLogs() {
           const response = await fetch(`/api/apps/${appId}/logs`);
           if (!response.ok) return;
           const data = await response.json();
           document.getElementById('logs').textContent = data.logs || '';
+        }
+        if (uploadForm) {
+          uploadForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', uploadForm.action);
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            setUploadProgress(0);
+            setInstallProgress(0, '等待上传完成...');
+            xhr.upload.onprogress = (progressEvent) => {
+              if (progressEvent.lengthComputable) {
+                setUploadProgress((progressEvent.loaded / progressEvent.total) * 100);
+              }
+            };
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                setUploadProgress(100);
+                setInstallProgress(25, '上传完成，正在处理...');
+                refreshStatus();
+                refreshLogs();
+              } else {
+                setInstallProgress(100, '上传失败，请重试。');
+              }
+            };
+            xhr.onerror = () => setInstallProgress(100, '上传失败，请检查网络。');
+            xhr.send(new FormData(uploadForm));
+          });
         }
         setInterval(() => { refreshStatus(); refreshLogs(); }, 4000);
       </script>

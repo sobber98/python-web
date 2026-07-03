@@ -33,11 +33,22 @@ class AppRepository:
                     desired_running INTEGER NOT NULL DEFAULT 0,
                     pid INTEGER,
                     last_error TEXT NOT NULL DEFAULT '',
+                    progress_stage TEXT NOT NULL DEFAULT 'idle',
+                    progress_percent INTEGER NOT NULL DEFAULT 0,
+                    progress_message TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+            self._ensure_column(conn, "progress_stage", "TEXT NOT NULL DEFAULT 'idle'")
+            self._ensure_column(conn, "progress_percent", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "progress_message", "TEXT NOT NULL DEFAULT ''")
+
+    def _ensure_column(self, conn: sqlite3.Connection, column: str, definition: str) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(managed_apps)").fetchall()}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE managed_apps ADD COLUMN {column} {definition}")
 
     def list_apps(self) -> list[ManagedApp]:
         with self.connect() as conn:
@@ -101,6 +112,18 @@ class AppRepository:
                 (status, last_error, pid, app_id),
             )
 
+    def set_progress(self, app_id: int, stage: str, percent: int, message: str) -> None:
+        bounded_percent = max(0, min(100, percent))
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE managed_apps
+                SET progress_stage = ?, progress_percent = ?, progress_message = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (stage, bounded_percent, message, app_id),
+            )
+
     def set_desired_running(self, app_id: int, desired: bool) -> None:
         with self.connect() as conn:
             conn.execute(
@@ -128,6 +151,9 @@ class AppRepository:
             desired_running=bool(row["desired_running"]),
             pid=row["pid"],
             last_error=str(row["last_error"]),
+            progress_stage=str(row["progress_stage"]),
+            progress_percent=int(row["progress_percent"]),
+            progress_message=str(row["progress_message"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )

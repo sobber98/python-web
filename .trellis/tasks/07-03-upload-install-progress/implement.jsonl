@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend contracts for FastAPI, process management, dependency install, and tests."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Progress fields extend managed app SQLite state."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Frontend progress UI and page rendering expectations."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Progress spans upload UI, API, database, process manager, and logs."}

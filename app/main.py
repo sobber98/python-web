@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import shutil
+import threading
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -111,53 +113,102 @@ def create_app(name: str = Form(...), _: None = Depends(require_page_auth)) -> R
 
 @app.post("/apps/{app_id}/upload")
 async def upload_script(
+    request: Request,
     app_id: int,
     file: UploadFile = File(...),
     manual_dependencies: str = Form(""),
     _: None = Depends(require_page_auth),
-) -> RedirectResponse:
+) -> Response:
     managed_app = repo.get_app(app_id)
     if managed_app is None:
         raise HTTPException(status_code=404, detail="App not found")
     if not file.filename or not file.filename.endswith(".py"):
         raise HTTPException(status_code=400, detail="Only .py files are supported")
 
-    manager.stop(app_id, desired=False)
     app_dir = manager.app_dir(managed_app)
-    script_path = app_dir / "main.py"
-    with script_path.open("wb") as output:
+    pending_path = app_dir / f".pending-upload-{uuid.uuid4().hex}.py"
+    with pending_path.open("wb") as output:
         shutil.copyfileobj(file.file, output)
-    try:
-        inferred = infer_dependencies(script_path)
-    except SyntaxError as exc:
-        repo.set_status(app_id, "error", f"Python syntax error: {exc}")
-        return RedirectResponse(f"/apps/{app_id}", status_code=303)
 
-    repo.update_upload(app_id, "main.py", manual_dependencies, inferred)
-    manager.start(app_id, install=True)
+    repo.set_progress(app_id, "upload_received", 25, "上传完成，等待处理...")
+    threading.Thread(
+        target=_process_uploaded_script,
+        args=(app_id, pending_path, manual_dependencies),
+        daemon=True,
+    ).start()
+
+    if _wants_json(request):
+        return JSONResponse({"accepted": True, "app_id": app_id})
     return RedirectResponse(f"/apps/{app_id}", status_code=303)
+
+
+def _wants_json(request: Request) -> bool:
+    accept = request.headers.get("accept", "")
+    requested_with = request.headers.get("x-requested-with", "")
+    return "application/json" in accept or requested_with == "XMLHttpRequest"
+
+
+def _process_uploaded_script(app_id: int, pending_path: Path, manual_dependencies: str) -> None:
+    managed_app = repo.get_app(app_id)
+    if managed_app is None:
+        return
+
+    def progress(stage: str, percent: int, message: str) -> None:
+        repo.set_progress(app_id, stage, percent, message)
+
+    try:
+        with manager.lock:
+            progress("upload_received", 25, "上传完成，正在停止当前应用...")
+            if not manager.stop(app_id, desired=False, reset_progress=False):
+                progress("failed", 100, "无法停止当前应用，未覆盖脚本。")
+                return
+            repo.set_status(app_id, "installing", pid=None)
+            progress("parsing", 35, "正在解析依赖...")
+            inferred = infer_dependencies(pending_path)
+            script_path = manager.app_dir(managed_app) / "main.py"
+            pending_path.replace(script_path)
+            repo.update_upload(app_id, "main.py", manual_dependencies, inferred)
+            progress("venv", 45, "正在准备虚拟环境...")
+            manager.start(app_id, install=True, progress=progress)
+    except SyntaxError as exc:
+        repo.set_status(app_id, "error", f"Python syntax error: {exc}", pid=None)
+        repo.set_progress(app_id, "failed", 100, "Python 语法错误，请检查上传文件。")
+    except Exception as exc:
+        repo.set_status(app_id, "error", f"Upload processing failed: {exc}", pid=None)
+        repo.set_progress(app_id, "failed", 100, "上传处理失败，请查看日志。")
+    finally:
+        if pending_path.exists():
+            pending_path.unlink()
 
 
 @app.post("/apps/{app_id}/start")
 def start_app(app_id: int, _: None = Depends(require_page_auth)) -> RedirectResponse:
+    if repo.get_app(app_id) is None:
+        raise HTTPException(status_code=404, detail="App not found")
     manager.start(app_id, install=True)
     return RedirectResponse(f"/apps/{app_id}", status_code=303)
 
 
 @app.post("/apps/{app_id}/stop")
 def stop_app(app_id: int, _: None = Depends(require_page_auth)) -> RedirectResponse:
+    if repo.get_app(app_id) is None:
+        raise HTTPException(status_code=404, detail="App not found")
     manager.stop(app_id, desired=False)
     return RedirectResponse(f"/apps/{app_id}", status_code=303)
 
 
 @app.post("/apps/{app_id}/restart")
 def restart_app(app_id: int, _: None = Depends(require_page_auth)) -> RedirectResponse:
+    if repo.get_app(app_id) is None:
+        raise HTTPException(status_code=404, detail="App not found")
     manager.restart(app_id)
     return RedirectResponse(f"/apps/{app_id}", status_code=303)
 
 
 @app.post("/apps/{app_id}/delete")
 def delete_app(app_id: int, _: None = Depends(require_page_auth)) -> RedirectResponse:
+    if repo.get_app(app_id) is None:
+        raise HTTPException(status_code=404, detail="App not found")
     manager.delete(app_id)
     return RedirectResponse("/", status_code=303)
 
@@ -174,6 +225,9 @@ def app_status(app_id: int, _: None = Depends(require_auth)) -> dict[str, object
         "desired_running": managed_app.desired_running,
         "pid": managed_app.pid,
         "last_error": managed_app.last_error,
+        "progress_stage": managed_app.progress_stage,
+        "progress_percent": managed_app.progress_percent,
+        "progress_message": managed_app.progress_message,
         "inferred_dependencies": managed_app.inferred_list,
         "manual_dependencies": managed_app.manual_list,
     }
