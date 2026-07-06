@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check that Docker lifecycle behavior, tests, and production Compose changes match the backend quality contract."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Check that normal shutdown does not persist false lifecycle errors."}

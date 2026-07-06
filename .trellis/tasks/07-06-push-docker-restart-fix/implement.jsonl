@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Defines Docker production deployment and managed app shutdown contracts relevant to the fix being pushed."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Defines lifecycle error persistence rules for managed apps."}
