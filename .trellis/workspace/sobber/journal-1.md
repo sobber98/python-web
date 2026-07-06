@@ -74,3 +74,37 @@ Implemented upload progress bar (XHR) and dependency install step-based progress
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Docker restart fix pushed
+
+**Date**: 2026-07-06
+**Task**: Docker restart fix pushed
+**Branch**: `master`
+
+### Summary
+
+Fixed Docker Compose restart handling for managed app subprocesses, added shutdown regression coverage and backend spec notes, created the Trellis push task, and pushed the changes to GitHub.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e638f2a` | (see git log) |
+| `0013b3f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
