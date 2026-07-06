@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -35,6 +36,38 @@ def test_stop_terminates_persisted_process_after_manager_restart(tmp_path: Path)
         assert stopped.status == "stopped"
         assert stopped.pid is None
         assert stopped.desired_running is False
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, 9)
+            process.wait(timeout=5)
+
+
+def test_shutdown_stops_tracked_process_without_sigterm_error(tmp_path: Path) -> None:
+    repo = AppRepository(tmp_path / "manager.db")
+    managed_app = repo.create_app("Worker")
+
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+    )
+    manager = ProcessManager(repo, tmp_path / "data")
+    try:
+        manager.processes[managed_app.id] = process
+        repo.set_desired_running(managed_app.id, True)
+        repo.set_status(managed_app.id, "running", pid=process.pid)
+        watcher = threading.Thread(target=manager._watch_process, args=(managed_app.id, process), daemon=True)
+        watcher.start()
+
+        manager.shutdown()
+        watcher.join(timeout=5)
+
+        stopped = repo.get_app(managed_app.id)
+        assert stopped is not None
+        assert stopped.status == "stopped"
+        assert stopped.pid is None
+        assert stopped.desired_running is True
+        assert stopped.last_error == ""
+        assert process.poll() is not None
     finally:
         if process.poll() is None:
             os.killpg(process.pid, 9)

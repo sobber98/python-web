@@ -26,7 +26,10 @@ APP_DIR = Path(__file__).resolve().parent
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     manager.restore_desired()
-    yield
+    try:
+        yield
+    finally:
+        manager.shutdown()
 
 
 app = FastAPI(title="Python Management Platform", lifespan=lifespan)

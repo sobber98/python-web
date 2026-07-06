@@ -153,6 +153,12 @@ class ProcessManager:
                 except Exception as exc:  # keep one failed app from blocking startup
                     self.repo.set_status(app.id, "error", f"Restore failed: {exc}", pid=None)
 
+    def shutdown(self) -> None:
+        with self.lock:
+            app_ids = list(self.processes)
+        for app_id in app_ids:
+            self.stop(app_id, desired=True, reset_progress=False)
+
     def install_dependencies(
         self,
         app: ManagedApp,

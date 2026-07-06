@@ -103,6 +103,54 @@ Copy `config.toml` into the Docker image and run as root with ephemeral `/app/da
 
 Ignore local secrets in `.dockerignore`, mount `config.toml` read-only, persist `/app/data`, and run the process as the non-root `manager` user.
 
+## Scenario: Managed App Shutdown During Container Restarts
+
+### 1. Scope / Trigger
+
+- Trigger: Docker or the ASGI server stops the manager process while uploaded app subprocesses are still running.
+
+### 2. Signatures
+
+- `ProcessManager.shutdown() -> None`
+- FastAPI lifespan shutdown must call `manager.shutdown()` after serving stops.
+- App process state persists in SQLite fields `status`, `desired_running`, `pid`, and `last_error`.
+
+### 3. Contracts
+
+- Container shutdown should terminate tracked app subprocesses before the manager exits.
+- Production Compose should allow enough stop grace for lifespan cleanup before Docker force-kills the container.
+- Shutdown preserves `desired_running=True` for apps that should be restored on the next manager startup.
+- Shutdown clears the runtime `pid` and stores status `stopped` without writing `Process exited with code -15` as an app error.
+- Startup restore uses `desired_running=True` as the source of truth and restarts those apps without reinstalling dependencies.
+
+### 4. Validation & Error Matrix
+
+- Tracked app receives shutdown `SIGTERM` -> status `stopped`, `pid=NULL`, `desired_running=True`, `last_error=''`.
+- App was intentionally stopped by operator -> status `stopped`, `pid=NULL`, `desired_running=False`.
+- App exits non-zero while still desired outside shutdown -> status `error`, `last_error='Process exited with code <code>'`.
+- Per-app restore failure during platform startup -> status `error` for that app only; other apps still restore.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `docker compose restart` stops tracked apps cleanly, then the next container startup restores desired apps.
+- Base: manual app stop remains manual and does not auto-restore.
+- Bad: allow Docker restart `SIGTERM` to race with watcher threads and persist `Process exited with code -15` as an app failure.
+
+### 6. Tests Required
+
+- Regression-test `ProcessManager.shutdown()` with a tracked subprocess and watcher thread, asserting status `stopped`, `pid is None`, `desired_running is True`, and empty `last_error`.
+- Keep persisted-PID stop coverage for manager restarts that happen without a container restart.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+Let the ASGI app exit without stopping tracked subprocesses, then rely on Docker to terminate them.
+
+#### Correct
+
+Call `manager.shutdown()` from the FastAPI lifespan shutdown hook so process-manager state is updated before Docker tears down the container.
+
 ## Scenario: FastAPI Template Rendering
 
 ### 1. Scope / Trigger
