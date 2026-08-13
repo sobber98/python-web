@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -190,6 +190,21 @@ def _process_uploaded_script(app_id: int, pending_path: Path, manual_dependencie
     finally:
         if pending_path.exists():
             pending_path.unlink()
+
+
+@app.get("/apps/{app_id}/download")
+def download_script(app_id: int, _: None = Depends(require_page_auth)) -> Response:
+    managed_app = repo.get_app(app_id)
+    if managed_app is None:
+        raise HTTPException(status_code=404, detail="App not found")
+    script_path = manager.script_path(managed_app)
+    if script_path is None or not script_path.exists():
+        raise HTTPException(status_code=404, detail="当前应用尚未上传脚本")
+    return FileResponse(
+        script_path,
+        media_type="text/x-python",
+        filename=managed_app.script_name or "main.py",
+    )
 
 
 @app.post("/apps/{app_id}/start")

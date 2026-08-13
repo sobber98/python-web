@@ -87,6 +87,9 @@
             <form method="post" action="/apps/{{ selected.id }}/start"><button type="submit">启动</button></form>
             <form method="post" action="/apps/{{ selected.id }}/stop"><button class="secondary" type="submit">停止</button></form>
             <form method="post" action="/apps/{{ selected.id }}/restart"><button class="secondary" type="submit">重启</button></form>
+            {% if selected.script_name %}
+            <form method="get" action="/apps/{{ selected.id }}/download"><button class="secondary" type="submit">下载脚本</button></form>
+            {% endif %}
             <form method="post" action="/apps/{{ selected.id }}/delete" onsubmit="return confirm('确定删除这个应用吗？')"><button class="danger" type="submit">删除</button></form>
           </div>
           <h4>推断依赖</h4>
