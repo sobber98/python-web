@@ -7,6 +7,10 @@ from pathlib import Path
 from app.models import ManagedApp
 
 
+PIP_INDEX_URL_SETTING_KEY = "pip_index_url"
+PIP_INDEX_SELECTOR_SETTING_KEY = "pip_index_selector"
+
+
 class AppRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
@@ -44,6 +48,15 @@ class AppRepository:
             self._ensure_column(conn, "progress_stage", "TEXT NOT NULL DEFAULT 'idle'")
             self._ensure_column(conn, "progress_percent", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "progress_message", "TEXT NOT NULL DEFAULT ''")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
 
     def _ensure_column(self, conn: sqlite3.Connection, column: str, definition: str) -> None:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(managed_apps)").fetchall()}
@@ -138,6 +151,26 @@ class AppRepository:
     def delete_app(self, app_id: int) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM managed_apps WHERE id = ?", (app_id,))
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = ?",
+                (key,),
+            ).fetchone()
+        return str(row["value"]) if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO app_settings (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
+            )
 
     def _row_to_app(self, row: sqlite3.Row) -> ManagedApp:
         return ManagedApp(

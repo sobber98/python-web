@@ -13,8 +13,16 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import load_settings
-from app.database import AppRepository
+from app.database import AppRepository, PIP_INDEX_URL_SETTING_KEY, PIP_INDEX_SELECTOR_SETTING_KEY
 from app.dependency_inference import infer_dependencies
+from app.pip_mirror import (
+    PIP_MIRROR_PRESETS,
+    OFFICIAL_INDEX,
+    get_preset,
+    normalize_mirror_url,
+    validate_mirror_url,
+    selector_url,
+)
 from app.process_manager import ProcessManager
 
 settings = load_settings()
@@ -242,3 +250,67 @@ def app_logs(app_id: int, _: None = Depends(require_auth)) -> dict[str, str]:
     if managed_app is None:
         raise HTTPException(status_code=404, detail="App not found")
     return {"logs": manager.read_log_tail(managed_app)}
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, _: None = Depends(require_page_auth)) -> HTMLResponse:
+    selector = repo.get_setting(PIP_INDEX_SELECTOR_SETTING_KEY, "official")
+    custom_url = repo.get_setting(PIP_INDEX_URL_SETTING_KEY, "") if selector == "custom" else ""
+    preset_url = OFFICIAL_INDEX
+    preset = get_preset(selector)
+    if preset and selector != "custom":
+        preset_url = preset.url
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "presets": PIP_MIRROR_PRESETS,
+            "current_selector": selector,
+            "current_custom_url": custom_url,
+            "current_effective_url": preset_url if selector != "custom" else custom_url,
+            "error": "",
+        },
+    )
+
+
+@app.post("/settings")
+def settings_save(
+    request: Request,
+    source: str = Form(...),
+    custom_url: str = Form(""),
+    _: None = Depends(require_page_auth),
+) -> Response:
+    if source == "custom":
+        ok, message = validate_mirror_url(custom_url)
+        if not ok:
+            return templates.TemplateResponse(
+                request,
+                "settings.html",
+                {
+                    "presets": PIP_MIRROR_PRESETS,
+                    "current_selector": "custom",
+                    "current_custom_url": custom_url,
+                    "current_effective_url": custom_url,
+                    "error": message,
+                },
+                status_code=400,
+            )
+        url = normalize_mirror_url(custom_url)
+    elif get_preset(source) is not None:
+        url = selector_url(source, custom_url)
+    else:
+        return templates.TemplateResponse(
+            request,
+            "settings.html",
+            {
+                "presets": PIP_MIRROR_PRESETS,
+                "current_selector": "official",
+                "current_custom_url": "",
+                "current_effective_url": OFFICIAL_INDEX,
+                "error": "未知的镜像源选项。",
+            },
+            status_code=400,
+        )
+    repo.set_setting(PIP_INDEX_SELECTOR_SETTING_KEY, source)
+    repo.set_setting(PIP_INDEX_URL_SETTING_KEY, url)
+    return RedirectResponse("/settings", status_code=303)

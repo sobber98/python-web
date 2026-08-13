@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>系统设置 | Python 管理平台</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">可信管理员控制台</p>
+      <h1>系统设置</h1>
+    </div>
+    <div class="button-row">
+      <a class="ghost-link" href="/">返回应用</a>
+      <form method="post" action="/logout"><button class="ghost" type="submit">退出登录</button></form>
+    </div>
+  </header>
+
+  <main class="layout settings-layout">
+    <section class="panel settings-panel">
+      <h2>pip 镜像源</h2>
+      <p class="muted">为上传/重启应用时执行的 <code>pip install</code> 选择依赖安装源。未配置时默认走 PyPI 官方源，行为与改动前一致。</p>
+
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+      <form method="post" action="/settings" class="stack">
+        <fieldset class="mirror-options">
+          <legend>镜像源</legend>
+          {% for preset in presets %}
+          <label class="mirror-option {% if current_selector == preset.key %}selected{% endif %}">
+            <input type="radio" name="source" value="{{ preset.key }}"
+                   {% if current_selector == preset.key %}checked{% endif %}
+                   {% if preset.key != 'custom' %}data-url="{{ preset.url }}"{% endif %}>
+            <span class="mirror-meta">
+              <strong>{{ preset.label }}</strong>
+              {% if preset.key == 'custom' %}
+                <em class="muted">由你指定</em>
+              {% else %}
+                <code class="muted">{{ preset.url }}</code>
+              {% endif %}
+            </span>
+          </label>
+          {% endfor %}
+        </fieldset>
+
+        <label id="custom-url-label" for="custom_url" {% if current_selector != 'custom' %}hidden{% endif %}>
+          自定义镜像源 URL
+          <input type="url" id="custom_url" name="custom_url"
+                 placeholder="https://mirrors.example.com/simple"
+                 value="{{ current_custom_url }}">
+          <small class="muted">支持 http 与 https；http 源会自动追加 <code>--trusted-host</code>。</small>
+        </label>
+
+        <div class="section-title">
+          <span class="muted">当前生效：<code>{{ current_effective_url or '（未设置，回退 PyPI 官方源）' }}</code></span>
+          <button type="submit">保存设置</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const radios = document.querySelectorAll('input[name="source"]');
+    const customLabel = document.getElementById('custom-url-label');
+    const customInput = document.getElementById('custom_url');
+    radios.forEach((radio) => {
+      radio.addEventListener('change', () => {
+        customLabel.hidden = radio.value !== 'custom';
+        document.querySelectorAll('.mirror-option').forEach((opt) => opt.classList.remove('selected'));
+        if (radio.checked) {
+          radio.closest('.mirror-option').classList.add('selected');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

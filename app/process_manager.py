@@ -9,9 +9,10 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
-from app.database import AppRepository
+from app.database import AppRepository, PIP_INDEX_URL_SETTING_KEY
 from app.dependency_inference import merge_dependencies
 from app.models import ManagedApp
+from app.pip_mirror import build_pip_index_args
 
 
 class ProcessManager:
@@ -176,7 +177,10 @@ class ProcessManager:
                     subprocess.run([sys.executable, "-m", "venv", str(app_dir / ".venv")], check=True, stdout=log, stderr=subprocess.STDOUT)
                 if dependencies:
                     self._progress(progress, "installing", 70, "正在安装依赖...")
-                    subprocess.run([str(venv_python), "-m", "pip", "install", *dependencies], check=True, stdout=log, stderr=subprocess.STDOUT)
+                    pip_cmd = [str(venv_python), "-m", "pip", "install", *dependencies]
+                    index_url = self.repo.get_setting(PIP_INDEX_URL_SETTING_KEY, "")
+                    pip_cmd.extend(build_pip_index_args(index_url))
+                    subprocess.run(pip_cmd, check=True, stdout=log, stderr=subprocess.STDOUT)
                 else:
                     self._progress(progress, "installing", 80, "没有需要安装的依赖。")
             except subprocess.CalledProcessError as exc:
