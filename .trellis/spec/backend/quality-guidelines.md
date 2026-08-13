@@ -66,7 +66,7 @@ Normalize package keys and let manual dependency lines replace inferred entries 
 
 - Image build: `docker build -t python-management-platform:<tag> .`
 - Compose deploy: `docker compose -f docker-compose.prod.yml up -d --build`
-- Runtime command: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- Runtime command: `uvicorn app.main:app --host 0.0.0.0 --port 7999`
 
 ### 3. Contracts
 

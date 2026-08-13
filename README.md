@@ -24,7 +24,7 @@ cp config.example.toml config.toml
 uvicorn app.main:app --reload
 ```
 
-Open `http://127.0.0.1:8000` and log in with the `admin_password` from `config.toml`.
+Open `http://127.0.0.1:7999` and log in with the `admin_password` from `config.toml`.
 
 ## Docker
 
@@ -53,7 +53,7 @@ Run it with local config and persistent runtime data:
 cp config.example.toml config.toml
 # edit config.toml and set admin_password/secret_key
 docker run --rm \
-  -p 8000:8000 \
+  -p 7999:7999 \
   -v "$(pwd)/config.toml:/app/config.toml:ro" \
   -v python-manager-data:/app/data \
   python-management-platform:local

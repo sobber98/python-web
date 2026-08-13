@@ -23,6 +23,6 @@ RUN useradd --create-home --home-dir /home/manager --shell /usr/sbin/nologin man
 
 USER manager
 
-EXPOSE 8000
+EXPOSE 7999
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7999"]
