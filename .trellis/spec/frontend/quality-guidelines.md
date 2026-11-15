@@ -6,43 +6,47 @@
 
 ## Overview
 
-The frontend is server-rendered Jinja plus small progressive-enhancement JavaScript in templates. Preserve basic form behavior where feasible and add JavaScript only for interactions that require browser APIs, such as upload progress events.
+The frontend is a React 18 + TypeScript SPA built with Vite, styled with Tailwind CSS, and served by FastAPI. All server communication goes through the typed client in `src/lib/api.ts`. Server state is managed with TanStack Query; do not mirror it into separate global stores.
 
 ## Scenario: Upload And Install Progress UI
 
 ### 1. Scope / Trigger
 
-- Trigger: upload progress crosses browser `XMLHttpRequest`, form submission, backend status polling, and dashboard rendering.
+- Trigger: upload progress crosses browser `XMLHttpRequest`, FastAPI multipart handling, backend status polling, and dashboard rendering.
 
 ### 2. Signatures
 
-- Upload form: `#upload-form`
-- Upload progress elements: `#upload-progress`, `#upload-bar`, `#upload-percent`
-- Install progress elements: `#install-progress`, `#install-bar`, `#install-percent`, `#progress-message`
+- Upload hook: `useUploadScript(appId)` in `src/lib/queries.ts`
+- Upload progress state: `active`, `percent`, `error`, `success`
+- Install progress source: `app.progress = { stage, percent, message }`
+- Backend upload endpoint: `POST /api/apps/{app_id}/upload`
+- Backend detail endpoint: `GET /api/apps/{app_id}`
 
 ### 3. Contracts
 
-- Use `XMLHttpRequest` for enhanced uploads because `fetch` does not expose standard upload progress events.
-- Set `Accept: application/json` and `X-Requested-With: XMLHttpRequest` for enhanced uploads.
-- Keep the original form action and method so the route can keep a non-JavaScript redirect fallback.
-- Display upload progress separately from backend install/start progress.
+- Use `XMLHttpRequest` for uploads because `fetch` does not expose standard upload progress events.
+- Send `Accept: application/json` and `X-Requested-With: XMLHttpRequest`.
+- Display browser upload progress separately from backend install progress.
+- After a successful upload, invalidate the app detail, app list, and logs queries.
+- Handle `401` by redirecting to `/login`.
 
 ### 4. Validation & Error Matrix
 
-- Upload network error -> show a visible failure message in the progress panel.
-- Upload HTTP error -> show a visible failure message.
-- Backend status has progress message -> show install progress panel and message.
+- Upload network error -> visible failure message.
+- Upload HTTP error -> parse `{"error": ...}` or `{"detail": ...}` and show it.
+- Backend progress message -> show install panel with stage label and percentage.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: upload bar reaches 100%, then install bar shows backend step messages.
-- Base: dashboard renders progress UI even before upload starts, hidden until needed.
+- Good: upload bar reaches 100%, then install bar shows backend stage messages until running.
+- Base: install panel stays hidden until `progress.percent > 0` or a message exists.
 - Bad: use one progress bar for both browser upload and backend install without explaining what it represents.
 
 ### 6. Tests Required
 
-- Render the dashboard and assert upload/install progress UI copy is present.
-- Render login/dashboard pages through FastAPI `TestClient` after changing `cwd`.
+- Render login, dashboard, and settings pages with Vitest + Testing Library and assert important visible Chinese labels.
+- Dashboard test must cover empty state, app detail, upload/install copy, and log output.
+- Backend API tests must cover auth, app payload shape, upload validation, and settings validation.
 
 ### 7. Wrong vs Correct
 
@@ -52,32 +56,44 @@ Use `fetch(new FormData(form))` and claim upload percentage is available.
 
 #### Correct
 
-Use `XMLHttpRequest` with `xhr.upload.onprogress` for transfer progress, then poll `/api/apps/{id}/status` for install/start progress.
+Use `XMLHttpRequest` with `xhr.upload.onprogress` for transfer progress, then read install progress from the polled `ManagedApp.progress` payload.
 
 ---
 
 ## Forbidden Patterns
 
 - Do not parse raw backend logs in the browser to infer app state.
-- Do not remove non-JavaScript form behavior unless explicitly required.
+- Do not duplicate server state into a separate global store.
+- Do not call `fetch` directly from components; use `src/lib/api.ts`.
+- Do not hardcode API base URLs; use same-origin paths under `/api`.
+- Do not render untrusted HTML; logs are rendered as text inside `<pre>`.
+- Do not use `any` in API payload types; update `src/types.ts` instead.
 
 ---
 
 ## Required Patterns
 
 - Keep user-visible management UI copy in Simplified Chinese.
-- Keep API/status internal values unchanged and map them only at the display layer.
+- Keep API/status internal values unchanged and map them only at the display layer (`src/lib/format.ts`).
+- Use `queryKeys` for every query and invalidation.
+- Guard protected routes with `ProtectedRoute` and `useSession`.
+- Use the shared UI primitives for buttons, cards, fields, badges, and progress bars.
 
 ---
 
 ## Testing Requirements
 
-- Page rendering tests should assert important visible Chinese UI labels.
+- `cd frontend && npm test` must pass.
+- `cd frontend && npm run typecheck` must pass.
+- Page tests should assert important visible Chinese UI labels.
+- Backend tests run with `pytest` from the repository root.
 
 ---
 
 ## Code Review Checklist
 
 - Upload and install progress are represented separately.
-- Authenticated endpoints remain protected.
+- Authenticated endpoints remain protected and 401s redirect to `/login`.
 - The dashboard still renders without an active app.
+- Loading, empty, and error states are handled for every page-level query.
+- No unused imports or `any` types; `tsc --noEmit` is clean.

@@ -22,83 +22,86 @@ def _reload_main_with(tmp_path: Path, monkeypatch):
     return app.main
 
 
-def test_dashboard_topbar_contains_settings_link(monkeypatch, tmp_path: Path) -> None:
+def _login(client) -> None:
+    response = client.post("/api/auth/login", json={"password": "secret"})
+    assert response.status_code == 200
+
+
+def test_settings_api_requires_auth(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    response = client.get("/api/settings")
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "请先登录后再操作。"}
+
+
+def test_settings_api_lists_presets_and_current_selection(monkeypatch, tmp_path: Path) -> None:
     main = _reload_main_with(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
 
     client = TestClient(main.app)
     with client:
-        client.post("/login", data={"password": "secret"}, follow_redirects=True)
-        response = client.get("/")
+        _login(client)
+        response = client.get("/api/settings")
 
     assert response.status_code == 200
-    assert 'href="/settings"' in response.text
-    assert "系统设置" in response.text
+    payload = response.json()
+    labels = [preset["label"] for preset in payload["presets"]]
+    assert "PyPI 官方源" in labels
+    assert "清华大学" in labels
+    assert "阿里云" in labels
+    assert "腾讯云" in labels
+    assert "中国科学技术大学" in labels
+    assert "自定义" in labels
+    assert payload["selector"] == "official"
+    assert payload["effective_url"] == "https://pypi.org/simple"
 
 
-def test_settings_page_requires_auth(monkeypatch, tmp_path: Path) -> None:
-    main = _reload_main_with(tmp_path, monkeypatch)
-    from fastapi.testclient import TestClient
-
-    client = TestClient(main.app)
-    response = client.get("/settings", follow_redirects=False)
-    assert response.status_code == 303
-    assert response.headers["location"] == "/login"
-
-
-def test_settings_page_lists_presets_and_current_selection(monkeypatch, tmp_path: Path) -> None:
-    main = _reload_main_with(tmp_path, monkeypatch)
-    from fastapi.testclient import TestClient
-
-    client = TestClient(main.app)
-    with client:
-        client.post("/login", data={"password": "secret"}, follow_redirects=True)
-        response = client.get("/settings")
-
-    assert response.status_code == 200
-    assert "PyPI 官方源" in response.text
-    assert "清华大学" in response.text
-    assert "阿里云" in response.text
-    assert "腾讯云" in response.text
-    assert "中国科学技术大学" in response.text
-    assert "自定义" in response.text
-    # 默认选中 official
-    assert 'value="official"' in response.text and "checked" in response.text
-
-
-def test_save_selects_preset_then_persists(monkeypatch, tmp_path: Path) -> None:
+def test_update_settings_selects_preset_then_persists(monkeypatch, tmp_path: Path) -> None:
     main = _reload_main_with(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
 
     client = TestClient(main.app)
     with client:
-        client.post("/login", data={"password": "secret"}, follow_redirects=True)
-        saved = client.post("/settings", data={"source": "tsinghua"}, follow_redirects=False)
-        assert saved.status_code == 303
-        assert saved.headers["location"] == "/settings"
-        redis = client.get("/settings")
+        _login(client)
+        saved = client.put("/api/settings", json={"source": "tsinghua", "custom_url": ""})
+        reread = client.get("/api/settings")
 
-    assert redis.status_code == 200
-    assert 'value="tsinghua"' in redis.text and "checked" in redis.text
+    assert saved.status_code == 200
+    assert saved.json()["selector"] == "tsinghua"
+    assert saved.json()["effective_url"] == "https://pypi.tuna.tsinghua.edu.cn/simple"
+    assert reread.json()["selector"] == "tsinghua"
     assert main.repo.get_setting(PIP_INDEX_URL_SETTING_KEY) == "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 
-def test_save_invalid_custom_url_rejected(monkeypatch, tmp_path: Path) -> None:
+def test_update_settings_rejects_invalid_custom_url(monkeypatch, tmp_path: Path) -> None:
     main = _reload_main_with(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
 
     client = TestClient(main.app)
     with client:
-        client.post("/login", data={"password": "secret"}, follow_redirects=True)
-        rejected = client.post(
-            "/settings",
-            data={"source": "custom", "custom_url": "notaurl"},
-            follow_redirects=False,
-        )
+        _login(client)
+        rejected = client.put("/api/settings", json={"source": "custom", "custom_url": "notaurl"})
 
     assert rejected.status_code == 400
+    assert "http" in rejected.json()["error"]
     assert main.repo.get_setting(PIP_INDEX_URL_SETTING_KEY, "") == ""
-    assert "http" in rejected.text
+
+
+def test_update_settings_rejects_unknown_source(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    with client:
+        _login(client)
+        rejected = client.put("/api/settings", json={"source": "unknown", "custom_url": ""})
+
+    assert rejected.status_code == 400
+    assert rejected.json() == {"error": "未知的镜像源选项。"}
 
 
 def test_install_dependencies_appends_index_url(tmp_path: Path) -> None:

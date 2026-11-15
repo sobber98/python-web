@@ -5,3 +5,6 @@ __pycache__/
 config.toml
 data/
 *.egg-info/
+frontend/node_modules/
+frontend/dist/
+app/static/app/

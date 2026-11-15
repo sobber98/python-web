@@ -17,11 +17,13 @@ app/
 ├── config.py                 # Environment-backed settings
 ├── database.py               # SQLite repository and schema setup
 ├── dependency_inference.py   # Import parsing and dependency merging
-├── main.py                   # FastAPI routes and template rendering
+├── main.py                   # FastAPI JSON API, SPA hosting, upload orchestration
 ├── models.py                 # Shared dataclasses
 ├── process_manager.py        # venv, subprocess, logs, restore control
-├── static/                   # CSS and browser JS
-└── templates/                # Jinja templates
+└── static/
+    ├── .gitkeep
+    └── app/                  # generated Vite build output (gitignored)
+frontend/                     # React + TypeScript SPA
 tests/                        # pytest tests for backend contracts
 ```
 
@@ -29,9 +31,10 @@ tests/                        # pytest tests for backend contracts
 
 ## Module Organization
 
-- Keep cross-layer status fields owned by `ManagedApp` in `app/models.py` and returned through route handlers without re-parsing in templates.
+- Keep cross-layer status fields owned by `ManagedApp` in `app/models.py` and serialize them once through `app_payload` in `app/main.py`.
 - Keep filesystem/process side effects in `ProcessManager`; route handlers should orchestrate requests but not directly spawn app scripts.
 - Keep dependency parsing pure where possible so it can be tested without FastAPI or subprocesses.
+- Keep frontend code in `frontend/`; FastAPI only serves the built SPA and JSON APIs.
 
 ---
 

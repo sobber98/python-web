@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 
-def test_login_page_renders_with_current_starlette_signature(monkeypatch, tmp_path) -> None:
+def _reload_main_with(tmp_path: Path, monkeypatch):
     config = tmp_path / "config.toml"
     config.write_text(
         f"admin_password = 'secret'\nsecret_key = 'stable'\ndata_dir = '{tmp_path / 'data'}'\n",
@@ -16,61 +17,129 @@ def test_login_page_renders_with_current_starlette_signature(monkeypatch, tmp_pa
     import app.main
 
     importlib.reload(app.main)
+    return app.main
 
-    client = TestClient(app.main.app)
-    response = client.get("/login")
+
+def _login(client: TestClient) -> None:
+    response = client.post("/api/auth/login", json={"password": "secret"})
+    assert response.status_code == 200
+
+
+def test_spa_entry_serves_built_index(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    index = tmp_path / "index.html"
+    index.write_text("<!doctype html><title>SPA 控制台</title>", encoding="utf-8")
+    monkeypatch.setattr(main, "FRONTEND_INDEX", index)
+
+    client = TestClient(main.app)
+    response = client.get("/apps/123")
 
     assert response.status_code == 200
-    assert "管理员密码" in response.text
-    assert "进入控制台" in response.text
+    assert "SPA 控制台" in response.text
 
 
-def test_dashboard_contains_upload_and_install_progress_ui(monkeypatch, tmp_path) -> None:
-    config = tmp_path / "config.toml"
-    config.write_text(
-        f"admin_password = 'secret'\nsecret_key = 'stable'\ndata_dir = '{tmp_path / 'data'}'\n",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
+def test_unknown_api_returns_json_404(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    client = TestClient(main.app)
 
-    import app.main
+    for path in ("/api/unknown", "/api"):
+        response = client.get(path)
+        assert response.status_code == 404
+        assert response.json() == {"error": "Not found"}
 
-    importlib.reload(app.main)
-    created = app.main.repo.create_app("演示应用")
 
-    client = TestClient(app.main.app)
+def test_auth_session_login_and_logout(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+
+    assert client.get("/api/auth/session").json() == {"authenticated": False}
+
+    rejected = client.post("/api/auth/login", json={"password": "wrong"})
+    assert rejected.status_code == 401
+    assert "密码错误" in rejected.json()["error"]
+
+    accepted = client.post("/api/auth/login", json={"password": "secret"})
+    assert accepted.status_code == 200
+    assert accepted.json() == {"authenticated": True}
+    assert client.get("/api/auth/session").json() == {"authenticated": True}
+
+    logged_out = client.post("/api/auth/logout")
+    assert logged_out.status_code == 200
+    assert client.get("/api/auth/session").json() == {"authenticated": False}
+
+
+def test_apps_api_requires_auth(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+
+    response = client.get("/api/apps")
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "请先登录后再操作。"}
+
+
+def test_create_app_and_read_status_payload(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+
     with client:
-        response = client.post("/login", data={"password": "secret"}, follow_redirects=True)
+        _login(client)
+        created = client.post("/api/apps", json={"name": "演示应用"})
 
-    assert response.status_code == 200
-    assert "上传进度" in response.text
-    assert "安装进度" in response.text
-    assert f"/apps/{created.id}/upload" in response.text
+        assert created.status_code == 201
+        payload = created.json()
+        assert payload["name"] == "演示应用"
+        assert payload["slug"] == "app"
+        assert payload["status"] == "new"
+        assert payload["progress"] == {"stage": "idle", "percent": 0, "message": ""}
+        assert payload["dependencies"] == {"inferred": [], "manual": []}
+
+        listed = client.get("/api/apps")
+        detail = client.get(f"/api/apps/{payload['id']}")
+
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["apps"]] == [payload["id"]]
+    assert detail.status_code == 200
+    assert detail.json()["id"] == payload["id"]
 
 
-def test_status_api_requires_auth_and_includes_progress_fields(monkeypatch, tmp_path) -> None:
-    config = tmp_path / "config.toml"
-    config.write_text(
-        f"admin_password = 'secret'\nsecret_key = 'stable'\ndata_dir = '{tmp_path / 'data'}'\n",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
+def test_create_app_rejects_blank_name(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    client = TestClient(main.app)
 
-    import app.main
-
-    importlib.reload(app.main)
-    created = app.main.repo.create_app("演示应用")
-    app.main.repo.set_progress(created.id, "installing", 70, "正在安装依赖...")
-
-    client = TestClient(app.main.app)
     with client:
-        unauthenticated = client.get(f"/api/apps/{created.id}/status")
-        login = client.post("/login", data={"password": "secret"}, follow_redirects=False)
-        authenticated = client.get(f"/api/apps/{created.id}/status")
+        _login(client)
+        response = client.post("/api/apps", json={"name": "   "})
 
-    assert unauthenticated.status_code == 401
-    assert login.status_code == 303
-    assert authenticated.status_code == 200
-    assert authenticated.json()["progress_stage"] == "installing"
-    assert authenticated.json()["progress_percent"] == 70
-    assert authenticated.json()["progress_message"] == "正在安装依赖..."
+    assert response.status_code == 400
+    assert response.json() == {"error": "应用名称不能为空。"}
+
+
+def test_upload_rejects_non_python_file(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    created = main.repo.create_app("演示应用")
+    client = TestClient(main.app)
+
+    with client:
+        _login(client)
+        response = client.post(
+            f"/api/apps/{created.id}/upload",
+            files={"file": ("notes.txt", b"print('hi')", "text/plain")},
+            data={"manual_dependencies": ""},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "仅支持上传 .py 文件。"}
+
+
+def test_download_requires_uploaded_script(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    created = main.repo.create_app("演示应用")
+    client = TestClient(main.app)
+
+    with client:
+        _login(client)
+        response = client.get(f"/api/apps/{created.id}/download")
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "当前应用尚未上传脚本。"}

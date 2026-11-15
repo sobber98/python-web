@@ -1,34 +1,91 @@
 # Python Management Platform
 
-A FastAPI-based web platform for trusted administrators to upload and run multiple Python scripts as managed background apps.
+A FastAPI + React web platform for trusted administrators to upload and run multiple Python scripts as managed background apps.
 
 ## Features
 
-- Admin password login.
+- Admin password login with signed session cookies.
 - Multiple managed Python apps.
-- `.py` upload with automatic restart for that app.
-- Best-effort dependency inference from imports plus manual dependency input.
+- `.py` upload with automatic dependency inference, reinstall, and restart.
 - Per-app virtual environment, process state, and log file.
-- Start, stop, restart, and delete controls.
+- Start, stop, restart, download, and delete controls.
+- Upload progress and backend install progress shown separately.
+- Real-time status and log polling.
 - Startup recovery for apps marked as running.
-- Responsive management UI.
+- Configurable pip mirror for dependency installation.
+- Responsive, dark-themed management console.
 
-## Run
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Backend | FastAPI, Starlette sessions, SQLite, subprocess management |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, React Router, TanStack Query |
+| Frontend tests | Vitest, Testing Library, jsdom |
+| Backend tests | pytest, FastAPI `TestClient` |
+
+The frontend is a standalone SPA in [`frontend/`](frontend). Vite builds it into `app/static/app/`, and FastAPI serves the built assets plus a catch-all route for client-side routing. All data operations go through JSON endpoints under `/api`.
+
+## Local Development
+
+Requirements: Python 3.11+ and Node.js 20+.
+
+### 1. Backend
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
 cp config.example.toml config.toml
 # edit config.toml and set admin_password
-uvicorn app.main:app --reload
 ```
 
-Open `http://127.0.0.1:7999` and log in with the `admin_password` from `config.toml`.
+### 2. Frontend
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+### 3. Run
+
+```bash
+uvicorn app.main:app --reload --port 7999
+```
+
+Open `http://127.0.0.1:7999` and log in with `admin_password` from `config.toml`.
+
+### Frontend Hot Reload
+
+Run the backend on port 7999 and Vite on port 5173:
+
+```bash
+# terminal 1
+uvicorn app.main:app --reload --port 7999
+
+# terminal 2
+cd frontend
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. Vite proxies `/api` requests to the backend.
+
+## Tests
+
+```bash
+# Backend
+pytest
+
+# Frontend
+cd frontend
+npm test
+npm run typecheck
+```
 
 ## Docker
 
-Build the production image locally:
+The multi-stage build compiles the SPA with Node and copies the result into the Python runtime image.
 
 ```bash
 docker build -t python-management-platform:local .

@@ -151,52 +151,65 @@ Let the ASGI app exit without stopping tracked subprocesses, then rely on Docker
 
 Call `manager.shutdown()` from the FastAPI lifespan shutdown hook so process-manager state is updated before Docker tears down the container.
 
-## Scenario: FastAPI Template Rendering
+## Scenario: SPA Serving And JSON API
 
 ### 1. Scope / Trigger
 
-- Trigger: page routes cross FastAPI, Starlette, Jinja templates, and packaged static/template files.
+- Trigger: requests cross FastAPI, Starlette static files, the Vite build output, JSON API routes, and client-side routing.
 
 ### 2. Signatures
 
-- `templates.TemplateResponse(request, "template.html", context)`
-- `Jinja2Templates(directory=APP_DIR / "templates")`
-- `StaticFiles(directory=APP_DIR / "static")`
+- `app.mount("/static", StaticFiles(directory=APP_DIR / "static"))`
+- `FRONTEND_INDEX = APP_DIR / "static" / "app" / "index.html"`
+- `spa_entry(full_path: str) -> Response` catch-all route
+- `app_payload(managed_app) -> dict` for API serialization
 
 ### 3. Contracts
 
-- Use the current Starlette `TemplateResponse(request, name, context)` calling convention.
-- Resolve template/static directories relative to `app/main.py`, not the process current working directory.
-- Page routes must render successfully in the Docker working directory and in tests that change `cwd`.
+- All data operations live under `/api/*` and return JSON.
+- The catch-all route must be registered after API routes and must not swallow `api/` or `static/` paths.
+- Non-API paths return `index.html` so React Router can handle `/login`, `/apps/{id}`, and `/settings`.
+- API errors use `{"error": "中文提示"}`.
+- Static/template directories resolve relative to `app/main.py`, not the process cwd.
 
 ### 4. Validation & Error Matrix
 
-- Old positional signature `TemplateResponse("login.html", {"request": request})` -> can raise `TypeError: unhashable type: 'dict'` on current Starlette.
-- Relative `app/templates` path from `cwd` -> can fail when the process starts outside the repository root.
+- Missing frontend build -> 503 HTML with the build command.
+- Unknown `/api/*` path -> 404 `{"error": "Not found"}`.
+- Unauthenticated API request -> 401 `{"error": "请先登录后再操作。"}`.
+- Invalid request body -> 422 `{"error": "请求参数不合法，请检查后重试。"}`.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: `TemplateResponse(request, "login.html", {"error": ""})`.
-- Base: login page returns 200 and contains `Admin password`.
-- Bad: passing request inside context while also using old positional argument order.
+- Good: GET `/apps/1` returns the SPA shell; the browser calls `/api/apps/1` with the session cookie.
+- Base: GET `/api/apps/1/logs` returns JSON.
+- Bad: return `index.html` for unknown `/api/*` paths, which breaks API clients.
 
 ### 6. Tests Required
 
-- Render `/login` through FastAPI `TestClient`.
-- Test after changing `cwd` away from the repository root.
+- Serve a temporary `FRONTEND_INDEX` and assert `/apps/123` returns it.
+- Assert unknown API paths return JSON 404.
+- Assert authenticated APIs reject unauthenticated callers.
+- Run tests after changing `cwd` away from the repository root.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```python
-templates.TemplateResponse("login.html", {"request": request, "error": ""})
+@app.get("/{full_path:path}")
+def spa_entry(full_path: str):
+    return FileResponse(FRONTEND_INDEX)  # also swallows /api/* and /static/*
 ```
 
 #### Correct
 
 ```python
-templates.TemplateResponse(request, "login.html", {"error": ""})
+@app.get("/{full_path:path}")
+def spa_entry(full_path: str) -> Response:
+    if full_path.startswith(("api/", "static/")):
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(FRONTEND_INDEX)
 ```
 
 ## Scenario: Upload And Install Progress
@@ -209,8 +222,8 @@ templates.TemplateResponse(request, "login.html", {"error": ""})
 
 - `AppRepository.set_progress(app_id, stage, percent, message) -> None`
 - `ProcessManager.start(app_id, install=True, progress=None) -> None`
-- API: `POST /apps/{app_id}/upload` returns JSON for XMLHttpRequest clients.
-- API: `GET /api/apps/{app_id}/status` includes `progress_stage`, `progress_percent`, and `progress_message`.
+- API: `POST /api/apps/{app_id}/upload` accepts multipart and returns `{"accepted": true, "app_id": id}` immediately.
+- API: `GET /api/apps/{app_id}` includes `progress: {stage, percent, message}`.
 
 ### 3. Contracts
 
@@ -230,14 +243,14 @@ templates.TemplateResponse(request, "login.html", {"error": ""})
 ### 5. Good/Base/Bad Cases
 
 - Good: XHR upload reaches 100%, backend progress advances through step messages, then status becomes `running`.
-- Base: normal non-JS form submission redirects back to the app detail page.
+- Base: upload returns `{"accepted": true}` immediately and the SPA polls the app detail.
 - Bad: keep the request blocked during pip install so the UI cannot poll progress.
 
 ### 6. Tests Required
 
 - Assert progress fields default and update in SQLite.
-- Assert dashboard renders upload/install progress UI.
-- Assert status API includes progress fields when app exists.
+- Assert the frontend dashboard renders upload/install progress copy (Vitest).
+- Assert the app detail API includes nested progress fields when the app exists.
 
 ### 7. Wrong vs Correct
 
@@ -247,7 +260,7 @@ Parse pip output to infer exact percentage and block the upload request until in
 
 #### Correct
 
-Return quickly for XHR uploads, run install/start in a background thread, and expose coarse progress through the authenticated status API.
+Return quickly after accepting the upload, run install/start in a background thread, and expose coarse progress through the authenticated app detail API.
 
 ---
 
@@ -279,10 +292,10 @@ Return quickly for XHR uploads, run install/start in a background thread, and ex
 
 ## Code Review Checklist
 
-- Authentication protects both page routes and `/api/*` routes.
+- Authentication protects all `/api/*` routes except session probing and login.
 - `desired_running` changes match operator intent.
 - Dependency install failure is visible to users and does not leave status as running.
 - Logs are per-app and tail-bounded.
 - Docker deployment uses the published GHCR image, preserves `/app/data`, and mounts `config.toml` read-only.
-- Template rendering works with current Starlette and does not depend on the process working directory.
+- SPA serving works from the Docker working directory and does not swallow `/api/*` or `/static/*`.
 - Upload/install progress is step-based and exposed through persisted status fields, not pip percentage parsing.
