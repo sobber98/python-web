@@ -139,6 +139,9 @@ docker compose -f docker-compose.prod.yml down
 - `secret_key`: optional session signing key. If omitted, a random key is generated at startup, which invalidates existing sessions after restart.
 - `data_dir`: runtime data directory. Defaults to `data`.
 - `db_path`: SQLite path. Defaults to `<data_dir>/manager.db`.
+- `session_max_age`: session lifetime in seconds. Defaults to 12 hours.
+- `session_https_only`: set to `true` when served over HTTPS so the session cookie is HTTPS-only. Defaults to `false`.
+- `max_upload_bytes`: maximum uploaded script size in bytes. Defaults to 10 MiB.
 
 ## Security Scope
 

@@ -22,11 +22,21 @@ export function SettingsPage() {
     initialized.current = true
   }, [settingsQuery.data])
 
+  useEffect(() => {
+    if (!saveSettings.data) return
+    // 保存成功后同步服务端规范化后的值，避免本地状态与已保存值不一致。
+    setSource(saveSettings.data.selector)
+    setCustomUrl(saveSettings.data.custom_url)
+  }, [saveSettings.data])
+
   const presets = settingsQuery.data?.presets ?? []
   const effectiveUrl =
     source === 'custom'
       ? customUrl.trim()
       : (presets.find((preset) => preset.key === source)?.url ?? '')
+  const savedSettings = settingsQuery.data
+  const dirty =
+    !savedSettings || source !== savedSettings.selector || customUrl !== savedSettings.custom_url
 
   const errorMessage =
     saveSettings.error instanceof ApiError
@@ -143,7 +153,7 @@ export function SettingsPage() {
               {errorMessage}
             </p>
           ) : null}
-          {saveSettings.isSuccess ? (
+          {saveSettings.isSuccess && !dirty ? (
             <p className="mt-3 flex items-center gap-1.5 rounded-xl border border-accent/20 bg-accent/[0.08] px-3 py-2 text-sm text-accent">
               <CheckCircle2 className="size-4" />
               设置已保存，将在下次安装依赖时生效。

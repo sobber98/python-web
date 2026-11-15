@@ -7,6 +7,8 @@ from pathlib import Path
 
 
 DEFAULT_CONFIG_PATH = Path("config.toml")
+DEFAULT_SESSION_MAX_AGE = 60 * 60 * 12
+DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -15,6 +17,9 @@ class Settings:
     db_path: Path
     admin_password: str
     secret_key: str
+    session_max_age: int
+    session_https_only: bool
+    max_upload_bytes: int
 
 
 def load_settings(config_path: Path | str = DEFAULT_CONFIG_PATH) -> Settings:
@@ -35,4 +40,7 @@ def load_settings(config_path: Path | str = DEFAULT_CONFIG_PATH) -> Settings:
         db_path=db_path,
         admin_password=admin_password,
         secret_key=str(raw.get("secret_key") or secrets.token_urlsafe(32)),
+        session_max_age=max(1, int(raw.get("session_max_age", DEFAULT_SESSION_MAX_AGE))),
+        session_https_only=bool(raw.get("session_https_only", False)),
+        max_upload_bytes=max(1, int(raw.get("max_upload_bytes", DEFAULT_MAX_UPLOAD_BYTES))),
     )

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from app.models import ManagedApp
@@ -18,12 +20,23 @@ class AppRepository:
         self.init_schema()
 
     def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=5.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        conn = self.connect()
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
     def init_schema(self) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS managed_apps (
@@ -45,9 +58,14 @@ class AppRepository:
                 )
                 """
             )
-            self._ensure_column(conn, "progress_stage", "TEXT NOT NULL DEFAULT 'idle'")
-            self._ensure_column(conn, "progress_percent", "INTEGER NOT NULL DEFAULT 0")
-            self._ensure_column(conn, "progress_message", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_columns(
+                conn,
+                {
+                    "progress_stage": "TEXT NOT NULL DEFAULT 'idle'",
+                    "progress_percent": "INTEGER NOT NULL DEFAULT 0",
+                    "progress_message": "TEXT NOT NULL DEFAULT ''",
+                },
+            )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS app_settings (
@@ -58,23 +76,24 @@ class AppRepository:
                 """
             )
 
-    def _ensure_column(self, conn: sqlite3.Connection, column: str, definition: str) -> None:
+    def _ensure_columns(self, conn: sqlite3.Connection, definitions: dict[str, str]) -> None:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(managed_apps)").fetchall()}
-        if column not in columns:
-            conn.execute(f"ALTER TABLE managed_apps ADD COLUMN {column} {definition}")
+        for column, definition in definitions.items():
+            if column not in columns:
+                conn.execute(f"ALTER TABLE managed_apps ADD COLUMN {column} {definition}")
 
     def list_apps(self) -> list[ManagedApp]:
-        with self.connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute("SELECT * FROM managed_apps ORDER BY updated_at DESC, id DESC").fetchall()
         return [self._row_to_app(row) for row in rows]
 
     def get_app(self, app_id: int) -> ManagedApp | None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT * FROM managed_apps WHERE id = ?", (app_id,)).fetchone()
         return self._row_to_app(row) if row else None
 
     def get_app_by_slug(self, slug: str) -> ManagedApp | None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT * FROM managed_apps WHERE slug = ?", (slug,)).fetchone()
         return self._row_to_app(row) if row else None
 
@@ -82,7 +101,7 @@ class AppRepository:
         slug_base = slugify(name)
         slug = slug_base
         suffix = 2
-        with self.connect() as conn:
+        with self._connection() as conn:
             while conn.execute("SELECT 1 FROM managed_apps WHERE slug = ?", (slug,)).fetchone():
                 slug = f"{slug_base}-{suffix}"
                 suffix += 1
@@ -103,7 +122,7 @@ class AppRepository:
         manual_dependencies: str,
         inferred_dependencies: list[str],
     ) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE managed_apps
@@ -115,7 +134,7 @@ class AppRepository:
             )
 
     def set_status(self, app_id: int, status: str, last_error: str = "", pid: int | None = None) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE managed_apps
@@ -127,7 +146,7 @@ class AppRepository:
 
     def set_progress(self, app_id: int, stage: str, percent: int, message: str) -> None:
         bounded_percent = max(0, min(100, percent))
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE managed_apps
@@ -137,8 +156,31 @@ class AppRepository:
                 (stage, bounded_percent, message, app_id),
             )
 
+    def set_status_with_progress(
+        self,
+        app_id: int,
+        status: str,
+        last_error: str,
+        stage: str,
+        percent: int,
+        message: str,
+    ) -> None:
+        # 状态与进度合并为一条 UPDATE，避免失败路径上的两次独立事务。
+        bounded_percent = max(0, min(100, percent))
+        with self._connection() as conn:
+            conn.execute(
+                """
+                UPDATE managed_apps
+                SET status = ?, last_error = ?, pid = NULL,
+                    progress_stage = ?, progress_percent = ?, progress_message = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (status, last_error, stage, bounded_percent, message, app_id),
+            )
+
     def set_desired_running(self, app_id: int, desired: bool) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE managed_apps
@@ -149,11 +191,11 @@ class AppRepository:
             )
 
     def delete_app(self, app_id: int) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute("DELETE FROM managed_apps WHERE id = ?", (app_id,))
 
     def get_setting(self, key: str, default: str = "") -> str:
-        with self.connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT value FROM app_settings WHERE key = ?",
                 (key,),
@@ -161,7 +203,7 @@ class AppRepository:
         return str(row["value"]) if row else default
 
     def set_setting(self, key: str, value: str) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO app_settings (key, value) VALUES (?, ?)

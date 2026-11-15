@@ -29,7 +29,7 @@ export function UploadCard({ app }: UploadCardProps) {
       return
     }
     setLocalError('')
-    upload.reset()
+    upload.cancel()
     setFile(nextFile)
   }
 
@@ -67,16 +67,20 @@ export function UploadCard({ app }: UploadCardProps) {
         />
 
         <div
-          role="button"
-          tabIndex={0}
-          aria-label="选择或拖入 Python 文件"
-          onClick={() => inputRef.current?.click()}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault()
-              inputRef.current?.click()
-            }
-          }}
+          role={file ? undefined : 'button'}
+          tabIndex={file ? undefined : 0}
+          aria-label={file ? undefined : '选择或拖入 Python 文件'}
+          onClick={file ? undefined : () => inputRef.current?.click()}
+          onKeyDown={
+            file
+              ? undefined
+              : (event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    inputRef.current?.click()
+                  }
+                }
+          }
           onDragOver={(event) => {
             event.preventDefault()
             setDragging(true)
@@ -109,7 +113,7 @@ export function UploadCard({ app }: UploadCardProps) {
                 onClick={(event) => {
                   event.stopPropagation()
                   setFile(null)
-                  upload.reset()
+                  upload.cancel()
                 }}
                 className="grid size-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"
               >

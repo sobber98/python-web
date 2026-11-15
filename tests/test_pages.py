@@ -6,10 +6,10 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 
-def _reload_main_with(tmp_path: Path, monkeypatch):
+def _reload_main_with(tmp_path: Path, monkeypatch, extra_config: str = ""):
     config = tmp_path / "config.toml"
     config.write_text(
-        f"admin_password = 'secret'\nsecret_key = 'stable'\ndata_dir = '{tmp_path / 'data'}'\n",
+        f"admin_password = 'secret'\nsecret_key = 'stable'\ndata_dir = '{tmp_path / 'data'}'\n{extra_config}\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -66,6 +66,20 @@ def test_auth_session_login_and_logout(monkeypatch, tmp_path: Path) -> None:
     logged_out = client.post("/api/auth/logout")
     assert logged_out.status_code == 200
     assert client.get("/api/auth/session").json() == {"authenticated": False}
+
+
+def test_login_is_rate_limited_after_repeated_failures(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    client = TestClient(main.app)
+
+    for _ in range(main.LOGIN_MAX_FAILURES):
+        rejected = client.post("/api/auth/login", json={"password": "wrong"})
+        assert rejected.status_code == 401
+
+    blocked = client.post("/api/auth/login", json={"password": "secret"})
+
+    assert blocked.status_code == 429
+    assert "频繁" in blocked.json()["error"]
 
 
 def test_apps_api_requires_auth(monkeypatch, tmp_path: Path) -> None:
@@ -130,6 +144,27 @@ def test_upload_rejects_non_python_file(monkeypatch, tmp_path: Path) -> None:
 
     assert response.status_code == 400
     assert response.json() == {"error": "仅支持上传 .py 文件。"}
+
+
+def test_upload_rejects_oversized_file(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch, extra_config="max_upload_bytes = 8")
+    created = main.repo.create_app("演示应用")
+    client = TestClient(main.app)
+
+    with client:
+        _login(client)
+        response = client.post(
+            f"/api/apps/{created.id}/upload",
+            files={"file": ("main.py", b"print('hello world')\n", "text/x-python")},
+            data={"manual_dependencies": ""},
+        )
+
+    assert response.status_code == 413
+    assert "8 B" in response.json()["error"]
+    managed_app = main.repo.get_app(created.id)
+    assert managed_app is not None
+    app_dir = main.manager.app_dir(managed_app)
+    assert not app_dir.exists() or not list(app_dir.glob(".pending-upload-*.py"))
 
 
 def test_download_requires_uploaded_script(monkeypatch, tmp_path: Path) -> None:

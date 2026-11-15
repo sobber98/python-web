@@ -14,6 +14,14 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: process.env.BUILD_OUT_DIR || '../app/static/app',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          query: ['@tanstack/react-query'],
+        },
+      },
+    },
   },
   server: {
     port: 5173,

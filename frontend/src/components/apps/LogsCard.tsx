@@ -8,10 +8,11 @@ import { useLogs } from '@/lib/queries'
 
 interface LogsCardProps {
   appId: number
+  poll?: boolean
 }
 
-export function LogsCard({ appId }: LogsCardProps) {
-  const logsQuery = useLogs(appId)
+export function LogsCard({ appId, poll = true }: LogsCardProps) {
+  const logsQuery = useLogs(appId, poll)
   const [autoScroll, setAutoScroll] = useState(true)
   const preRef = useRef<HTMLPreElement>(null)
   const logs = logsQuery.data?.logs ?? ''
@@ -26,7 +27,7 @@ export function LogsCard({ appId }: LogsCardProps) {
     <Card className="p-6">
       <CardHeader
         title="运行日志"
-        description="每 4 秒自动刷新，展示当前应用的最近输出。"
+        description="应用运行时每 4 秒自动刷新，展示当前应用的最近输出。"
         icon={<ScrollText className="size-4" />}
         actions={
           <div className="flex items-center gap-2">

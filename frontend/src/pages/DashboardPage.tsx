@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/Feedback'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatTime } from '@/lib/format'
-import { useApp, useApps } from '@/lib/queries'
+import { useApps } from '@/lib/queries'
 import type { ManagedApp } from '@/types'
 
 function Stat({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
@@ -82,8 +82,7 @@ export function DashboardPage() {
   const appsQuery = useApps()
   const apps = appsQuery.data?.apps ?? []
   const parsedAppId = appIdParam && /^\d+$/.test(appIdParam) ? Number(appIdParam) : null
-  const appQuery = useApp(parsedAppId)
-  const app = appQuery.data ?? null
+  const app = parsedAppId === null ? null : (apps.find((item) => item.id === parsedAppId) ?? null)
 
   useEffect(() => {
     if (!appIdParam && apps.length > 0) {
@@ -123,9 +122,9 @@ export function DashboardPage() {
         action={<Button onClick={() => navigate('/')}>返回应用列表</Button>}
       />
     )
-  } else if (appQuery.isLoading) {
+  } else if (appsQuery.isLoading) {
     workspace = <WorkspaceSkeleton />
-  } else if (appQuery.isError || !app) {
+  } else if (appsQuery.isError || !app) {
     workspace = (
       <EmptyState
         icon={<Boxes className="size-6" />}
@@ -135,6 +134,7 @@ export function DashboardPage() {
       />
     )
   } else {
+    const liveStatus = app.status === 'running' || app.status === 'installing' || app.status === 'starting'
     workspace = (
       <div className="grid gap-5">
         <AppSummary app={app} />
@@ -142,7 +142,7 @@ export function DashboardPage() {
           <UploadCard key={app.id} app={app} />
           <ControlCard app={app} />
         </div>
-        <LogsCard appId={app.id} />
+        <LogsCard appId={app.id} poll={liveStatus} />
       </div>
     )
   }

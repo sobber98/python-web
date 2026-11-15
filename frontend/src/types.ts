@@ -54,8 +54,3 @@ export interface SettingsResponse {
 export interface ApiMessageResponse {
   ok: boolean
 }
-
-export interface UploadAcceptedResponse {
-  accepted: boolean
-  app_id: number
-}
