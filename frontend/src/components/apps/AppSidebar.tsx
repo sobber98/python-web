@@ -64,7 +64,7 @@ export function AppSidebar({ apps, activeAppId, loading }: AppSidebarProps) {
 
       {createError ? <p className="mt-2 text-xs text-rose-400">{createError}</p> : null}
 
-      <nav className="mt-4 grid max-h-[26rem] gap-1 overflow-y-auto pr-1">
+      <nav className="mt-4 grid max-h-[26rem] grid-cols-1 gap-1 overflow-y-auto pr-1">
         {loading ? (
           <div className="grid gap-2">
             {[0, 1, 2].map((index) => (
@@ -79,7 +79,7 @@ export function AppSidebar({ apps, activeAppId, loading }: AppSidebarProps) {
               key={app.id}
               to={`/apps/${app.id}`}
               className={clsx(
-                'group flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 transition',
+                'group flex min-w-0 items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 transition',
                 app.id === activeAppId
                   ? 'border-accent/25 bg-accent/[0.08]'
                   : 'border-transparent hover:border-white/10 hover:bg-white/[0.05]',

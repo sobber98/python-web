@@ -56,7 +56,7 @@ export function LogsCard({ appId, poll = true }: LogsCardProps) {
       <div className="relative mt-5">
         <pre
           ref={preRef}
-          className="max-h-[32rem] min-h-[18rem] overflow-auto rounded-2xl border border-white/5 bg-ink-950/80 p-4 font-mono text-xs leading-relaxed text-slate-300"
+          className="max-h-[32rem] min-h-[18rem] w-full overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-white/5 bg-ink-950/80 p-4 font-mono text-xs leading-relaxed text-slate-300"
         >
           {logs || '暂无日志输出。应用启动后，日志会显示在这里。'}
         </pre>

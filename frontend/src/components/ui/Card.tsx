@@ -10,7 +10,7 @@ export function Card({ className, children }: CardProps) {
   return (
     <section
       className={clsx(
-        'rounded-3xl border border-white/10 bg-white/[0.055] shadow-glow backdrop-blur-xl',
+        'min-w-0 rounded-3xl border border-white/10 bg-white/[0.055] shadow-glow backdrop-blur-xl',
         className,
       )}
     >
