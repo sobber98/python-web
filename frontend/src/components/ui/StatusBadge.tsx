@@ -30,7 +30,7 @@ export function StatusBadge({ status, subtle = false }: StatusBadgeProps) {
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-full border font-semibold',
+        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border font-semibold',
         subtle ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs',
         statusClasses[status] ?? statusClasses.new,
       )}
