@@ -138,7 +138,7 @@ export function DashboardPage() {
     workspace = (
       <div className="grid gap-5">
         <AppSummary app={app} />
-        <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid items-start gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <UploadCard key={app.id} app={app} />
           <ControlCard app={app} />
         </div>

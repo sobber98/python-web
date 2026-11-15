@@ -61,54 +61,66 @@ export function ControlCard({ app }: ControlCardProps) {
         icon={<Play className="size-4" />}
       />
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          onClick={() => action.mutate({ appId: app.id, action: 'start' })}
-          loading={runningAction === 'start'}
-          disabled={!canStart}
-        >
-          <Play className="size-3.5" />
-          启动
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => action.mutate({ appId: app.id, action: 'stop' })}
-          loading={runningAction === 'stop'}
-          disabled={!canStop}
-        >
-          <Square className="size-3.5" />
-          停止
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => action.mutate({ appId: app.id, action: 'restart' })}
-          loading={runningAction === 'restart'}
-          disabled={!canRestart}
-        >
-          <RotateCw className="size-3.5" />
-          重启
-        </Button>
-        {app.script_name ? (
-          <a
-            href={api.downloadUrl(app.id)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3.5 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/[0.12]"
+      <div className="mt-5 grid gap-2">
+        <div className="grid grid-cols-3 gap-2">
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={() => action.mutate({ appId: app.id, action: 'start' })}
+            loading={runningAction === 'start'}
+            disabled={!canStart}
           >
-            <Download className="size-3.5" />
-            下载脚本
-          </a>
-        ) : (
-          <span className="inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-full border border-white/5 px-3.5 text-xs font-semibold text-slate-600">
-            <Download className="size-3.5" />
-            下载脚本
-          </span>
-        )}
-        <Button size="sm" variant="danger" onClick={() => setConfirmOpen(true)}>
-          <Trash2 className="size-3.5" />
-          删除
-        </Button>
+            <Play className="size-3.5" />
+            启动
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="w-full"
+            onClick={() => action.mutate({ appId: app.id, action: 'stop' })}
+            loading={runningAction === 'stop'}
+            disabled={!canStop}
+          >
+            <Square className="size-3.5" />
+            停止
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="w-full"
+            onClick={() => action.mutate({ appId: app.id, action: 'restart' })}
+            loading={runningAction === 'restart'}
+            disabled={!canRestart}
+          >
+            <RotateCw className="size-3.5" />
+            重启
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {app.script_name ? (
+            <a
+              href={api.downloadUrl(app.id)}
+              className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3.5 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/[0.12]"
+            >
+              <Download className="size-3.5" />
+              下载脚本
+            </a>
+          ) : (
+            <span className="inline-flex h-9 w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-full border border-white/5 px-3.5 text-xs font-semibold text-slate-600">
+              <Download className="size-3.5" />
+              下载脚本
+            </span>
+          )}
+          <Button
+            size="sm"
+            variant="danger"
+            className="w-full"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="size-3.5" />
+            删除
+          </Button>
+        </div>
       </div>
 
       {errorMessage ? (

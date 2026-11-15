@@ -174,7 +174,11 @@ export function SettingsPage() {
               </li>
               <li className="flex gap-2">
                 <span className="mt-2 size-1 shrink-0 rounded-full bg-accent" />
-                http 源会自动追加 <code className="text-slate-300">--trusted-host</code>，https 则直接使用。
+                http 源会自动追加{' '}
+                <code className="whitespace-nowrap rounded bg-white/[0.06] px-1 py-0.5 text-[11px] text-slate-300">
+                  --trusted-host
+                </code>
+                ，https 则直接使用。
               </li>
               <li className="flex gap-2">
                 <span className="mt-2 size-1 shrink-0 rounded-full bg-accent" />

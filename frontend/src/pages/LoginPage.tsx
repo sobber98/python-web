@@ -95,11 +95,12 @@ export function LoginPage() {
 
       <section className="relative flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-md animate-fade-up rounded-[2rem] border border-white/10 bg-ink-900/80 p-8 shadow-glow backdrop-blur-2xl sm:p-10">
-          <div className="flex items-center justify-between lg:hidden">
+          <div className="flex items-center gap-3 lg:hidden">
             <Logo compact />
+            <span className="text-sm font-bold tracking-tight text-white">Python 管理平台</span>
           </div>
 
-          <span className="mt-2 grid size-12 place-items-center rounded-2xl border border-accent/20 bg-accent/10 text-accent lg:mt-0">
+          <span className="mt-6 hidden size-12 place-items-center rounded-2xl border border-accent/20 bg-accent/10 text-accent lg:mt-0 lg:grid">
             <KeyRound className="size-6" />
           </span>
           <h2 className="mt-5 text-2xl font-semibold tracking-tight text-white">管理员登录</h2>
