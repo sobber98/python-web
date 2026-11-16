@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from app.database import AppRepository
-from app.process_manager import ProcessManager
+from app.process_manager import ProcessManager, listening_ports
 
 
 def test_stop_terminates_persisted_process_after_manager_restart(tmp_path: Path) -> None:
@@ -74,6 +74,38 @@ def test_shutdown_stops_tracked_process_without_sigterm_error(tmp_path: Path) ->
         if process.poll() is None:
             os.killpg(process.pid, 9)
             process.wait(timeout=5)
+
+
+def test_listening_ports_tracks_app_process_group() -> None:
+    script = (
+        "import socket, time\n"
+        "sock = socket.socket()\n"
+        "sock.bind(('127.0.0.1', 0))\n"
+        "sock.listen()\n"
+        "print(sock.getsockname()[1], flush=True)\n"
+        "time.sleep(2)\n"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", script],
+        stdout=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        port = int(process.stdout.readline().strip())
+        deadline = time.monotonic() + 2
+        detected: list[int] = []
+        while time.monotonic() < deadline:
+            detected = listening_ports([process.pid]).get(process.pid, [])
+            if port in detected:
+                break
+            time.sleep(0.05)
+
+        assert port in detected
+    finally:
+        process.wait(timeout=10)
+        if process.stdout is not None:
+            process.stdout.close()
 
 
 def test_app_dir_is_pure_path_until_ensure_called(tmp_path: Path) -> None:

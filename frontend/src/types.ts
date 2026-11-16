@@ -27,6 +27,7 @@ export interface ManagedApp {
   status: AppStatus
   desired_running: boolean
   pid: number | null
+  ports: number[]
   last_error: string
   progress: AppProgress
   dependencies: AppDependencies

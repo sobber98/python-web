@@ -54,8 +54,13 @@ function AppSummary({ app }: { app: ManagedApp }) {
         </div>
       ) : null}
 
-      <div className="relative mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="relative mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <Stat label="进程 ID" value={app.pid ? String(app.pid) : '未运行'} mono />
+        <Stat
+          label="监听端口"
+          value={app.ports.length > 0 ? app.ports.map((port) => `:${port}`).join(' ') : '未监听'}
+          mono
+        />
         <Stat label="脚本" value={app.script_name ?? '未上传'} />
         <Stat label="依赖" value={`${app.dependencies.inferred.length + app.dependencies.manual.length} 个`} />
         <Stat label="创建时间" value={formatTime(app.created_at)} />

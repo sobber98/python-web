@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -18,12 +18,25 @@ const demoApp: ManagedApp = {
   status: 'installing',
   desired_running: true,
   pid: null,
+  ports: [],
   last_error: '',
   progress: { stage: 'installing', percent: 70, message: '正在安装依赖...' },
   dependencies: { inferred: ['requests'], manual: ['requests==2.32.3'] },
   source: { type: 'upload', repo: '', branch: '', path: '', commit: '' },
   created_at: '2026-01-01 00:00:00',
   updated_at: '2026-01-01 00:00:00',
+}
+
+const dataApp: ManagedApp = {
+  ...demoApp,
+  id: 2,
+  name: '数据分析',
+  slug: 'data-sync',
+  status: 'running',
+  pid: 4321,
+  ports: [8080],
+  created_at: '2026-02-01 00:00:00',
+  updated_at: '2026-02-01 00:00:00',
 }
 
 const githubSettingsPayload = {
@@ -109,6 +122,56 @@ describe('DashboardPage', () => {
     expect(screen.getByText('推断依赖')).toBeInTheDocument()
     expect(screen.getByText('requests')).toBeInTheDocument()
     expect(await screen.findByText('服务日志输出')).toBeInTheDocument()
+  })
+
+  it('展示应用当前监听的端口', async () => {
+    stubApi({
+      '/api/apps': { apps: [dataApp] },
+      '/api/apps/2': dataApp,
+      '/api/apps/2/logs': { logs: '' },
+    })
+    renderPage(<DashboardPage />, '/apps/2')
+
+    expect(await screen.findByText('监听端口')).toBeInTheDocument()
+    expect(screen.getAllByText(':8080').length).toBeGreaterThan(0)
+  })
+
+  it('支持按名称搜索应用', async () => {
+    stubApi({
+      '/api/apps': { apps: [demoApp, dataApp] },
+      '/api/apps/1': demoApp,
+      '/api/apps/1/logs': { logs: '' },
+    })
+    renderPage(<DashboardPage />, '/apps/1')
+
+    const nav = await screen.findByRole('navigation', { name: '应用列表' })
+    await waitFor(() => expect(within(nav).getAllByRole('link')).toHaveLength(2))
+
+    fireEvent.change(screen.getByLabelText('搜索应用'), { target: { value: '数据' } })
+
+    const links = within(nav).getAllByRole('link')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveTextContent('数据分析')
+  })
+
+  it('支持按创建时间与名称排序应用', async () => {
+    stubApi({
+      '/api/apps': { apps: [demoApp, dataApp] },
+      '/api/apps/1': demoApp,
+      '/api/apps/1/logs': { logs: '' },
+    })
+    renderPage(<DashboardPage />, '/apps/1')
+
+    const nav = await screen.findByRole('navigation', { name: '应用列表' })
+    const firstAppName = () => within(nav).getAllByRole('link')[0]?.textContent ?? ''
+
+    await waitFor(() => expect(firstAppName()).toContain('数据分析'))
+
+    fireEvent.change(screen.getByLabelText('应用排序'), { target: { value: 'created_asc' } })
+    expect(firstAppName()).toContain('演示应用')
+
+    fireEvent.change(screen.getByLabelText('应用排序'), { target: { value: 'name_desc' } })
+    expect(firstAppName()).toContain('演示应用')
   })
 })
 

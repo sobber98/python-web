@@ -53,7 +53,7 @@ from app.pip_mirror import (
     selector_url,
     validate_mirror_url,
 )
-from app.process_manager import ProcessManager
+from app.process_manager import ProcessManager, listening_ports
 
 settings = load_settings()
 repo = AppRepository(settings.db_path)
@@ -194,7 +194,9 @@ def _record_login_failure(key: str) -> None:
         _login_failures.setdefault(key, []).append(time.monotonic())
 
 
-def app_payload(managed_app: ManagedApp) -> dict[str, object]:
+def app_payload(managed_app: ManagedApp, ports: list[int] | None = None) -> dict[str, object]:
+    if ports is None:
+        ports = listening_ports([managed_app.pid]).get(managed_app.pid or 0, [])
     return {
         "id": managed_app.id,
         "name": managed_app.name,
@@ -203,6 +205,7 @@ def app_payload(managed_app: ManagedApp) -> dict[str, object]:
         "status": managed_app.status,
         "desired_running": managed_app.desired_running,
         "pid": managed_app.pid,
+        "ports": ports,
         "last_error": managed_app.last_error,
         "progress": {
             "stage": managed_app.progress_stage,
@@ -474,7 +477,14 @@ def auth_logout(request: Request) -> dict[str, bool]:
 
 @app.get("/api/apps")
 def list_apps(_: None = Depends(require_auth)) -> dict[str, object]:
-    return {"apps": [app_payload(managed_app) for managed_app in repo.list_apps()]}
+    apps = repo.list_apps()
+    ports = listening_ports([managed_app.pid for managed_app in apps])
+    return {
+        "apps": [
+            app_payload(managed_app, ports.get(managed_app.pid or 0, []))
+            for managed_app in apps
+        ]
+    }
 
 
 @app.post("/api/apps", status_code=201)

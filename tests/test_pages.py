@@ -105,6 +105,7 @@ def test_create_app_and_read_status_payload(monkeypatch, tmp_path: Path) -> None
         assert payload["name"] == "演示应用"
         assert payload["slug"] == "app"
         assert payload["status"] == "new"
+        assert payload["ports"] == []
         assert payload["progress"] == {"stage": "idle", "percent": 0, "message": ""}
         assert payload["dependencies"] == {"inferred": [], "manual": []}
 

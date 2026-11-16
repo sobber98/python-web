@@ -19,6 +19,90 @@ from app.pip_mirror import build_pip_index_args
 
 MAX_LOG_BYTES = 5 * 1024 * 1024
 DEPENDENCY_MARKER = ".deps-hash"
+PROC_ROOT = Path("/proc")
+
+
+def _process_group(proc_dir: Path) -> int | None:
+    try:
+        stat = (proc_dir / "stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    # stat 格式为 "pid (comm) state ppid pgrp ..."，comm 可能包含空格与括号。
+    tail = stat[stat.rfind(")") + 2 :].split()
+    if len(tail) < 3:
+        return None
+    try:
+        return int(tail[2])
+    except ValueError:
+        return None
+
+
+def _socket_inodes(proc_dir: Path) -> set[str]:
+    inodes: set[str] = set()
+    try:
+        entries = list((proc_dir / "fd").iterdir())
+    except OSError:
+        return inodes
+    for entry in entries:
+        try:
+            target = os.readlink(entry)
+        except OSError:
+            continue
+        if target.startswith("socket:[") and target.endswith("]"):
+            inodes.add(target[8:-1])
+    return inodes
+
+
+def _listening_socket_inodes(proc_root: Path = PROC_ROOT) -> dict[str, int]:
+    """扫描 /proc，返回处于监听状态的 socket inode 到进程组 ID 的映射。"""
+    inode_groups: dict[str, int] = {}
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return inode_groups
+    for proc_dir in entries:
+        if not proc_dir.name.isdigit():
+            continue
+        group = _process_group(proc_dir)
+        if group is None:
+            continue
+        for inode in _socket_inodes(proc_dir):
+            inode_groups[inode] = group
+    return inode_groups
+
+
+def _listening_ports(proc_root: Path = PROC_ROOT) -> list[tuple[str, int]]:
+    """读取 /proc/net/tcp{,6}，返回处于 LISTEN 状态的 (inode, 端口) 列表。"""
+    listening: list[tuple[str, int]] = []
+    for name in ("tcp", "tcp6"):
+        try:
+            lines = (proc_root / "net" / name).read_text(encoding="utf-8").splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if len(fields) < 10 or fields[3] != "0A":
+                continue
+            try:
+                port = int(fields[1].rsplit(":", 1)[-1], 16)
+            except ValueError:
+                continue
+            listening.append((fields[9], port))
+    return listening
+
+
+def listening_ports(pids: list[int | None], proc_root: Path = PROC_ROOT) -> dict[int, list[int]]:
+    """按进程组匹配监听端口，应用进程与其子进程都能被识别。"""
+    targets = {pid for pid in pids if pid}
+    if not targets:
+        return {}
+    inode_groups = _listening_socket_inodes(proc_root)
+    ports: dict[int, set[int]] = {pid: set() for pid in targets}
+    for inode, port in _listening_ports(proc_root):
+        group = inode_groups.get(inode)
+        if group in ports:
+            ports[group].add(port)
+    return {pid: sorted(values) for pid, values in ports.items()}
 
 
 def _rotate_log(path: Path, max_bytes: int = MAX_LOG_BYTES) -> None:
