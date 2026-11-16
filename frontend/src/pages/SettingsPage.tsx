@@ -1,12 +1,13 @@
 import clsx from 'clsx'
-import { Check, CheckCircle2, Globe2, Info, Save, Settings2 } from 'lucide-react'
+import { Check, CheckCircle2, Globe2, Info, KeyRound, Lock, Save, Settings2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
 
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Field, inputClassName } from '@/components/ui/Field'
 import { ApiError } from '@/lib/api'
-import { useSaveSettings, useSettings } from '@/lib/queries'
+import { useChangePassword, useSaveSettings, useSettings } from '@/lib/queries'
 
 export function SettingsPage() {
   const settingsQuery = useSettings()
@@ -44,6 +45,48 @@ export function SettingsPage() {
       : saveSettings.error
         ? '保存失败，请稍后重试。'
         : ''
+
+  const changePassword = useChangePassword()
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordValidation, setPasswordValidation] = useState('')
+
+  useEffect(() => {
+    if (!changePassword.isSuccess) return
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+  }, [changePassword.isSuccess])
+
+  const passwordError =
+    passwordValidation ||
+    (changePassword.error instanceof ApiError
+      ? changePassword.error.message
+      : changePassword.error
+        ? '修改失败，请稍后重试。'
+        : '')
+
+  const clearPasswordFeedback = () => {
+    if (passwordValidation) setPasswordValidation('')
+    if (!changePassword.isPending && (changePassword.isSuccess || changePassword.error)) {
+      changePassword.reset()
+    }
+  }
+
+  const submitPassword = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (newPassword.length < 8) {
+      setPasswordValidation('新密码至少需要 8 个字符。')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordValidation('两次输入的新密码不一致。')
+      return
+    }
+    setPasswordValidation('')
+    changePassword.mutate({ currentPassword, newPassword })
+  }
 
   return (
     <div>
@@ -198,6 +241,82 @@ export function SettingsPage() {
           </Card>
         </div>
       </div>
+
+      <Card className="mt-5 p-6">
+        <CardHeader
+          title="修改管理员密码"
+          description="修改后立即生效，当前登录会话保持有效，后续登录请使用新密码。"
+          icon={<KeyRound className="size-4" />}
+        />
+        <form className="mt-5 grid gap-4" onSubmit={submitPassword}>
+          <Field label="当前密码" htmlFor="current-password">
+            <input
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => {
+                setCurrentPassword(event.target.value)
+                clearPasswordFeedback()
+              }}
+              className={inputClassName}
+            />
+          </Field>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="新密码" htmlFor="new-password" hint="至少 8 个字符。">
+              <input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => {
+                  setNewPassword(event.target.value)
+                  clearPasswordFeedback()
+                }}
+                className={inputClassName}
+              />
+            </Field>
+            <Field label="确认新密码" htmlFor="confirm-password">
+              <input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value)
+                  clearPasswordFeedback()
+                }}
+                className={inputClassName}
+              />
+            </Field>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs leading-relaxed text-slate-500">
+              密码以 PBKDF2 哈希存储在数据库中；config.toml 中的初始密码仅在首次修改前生效。
+            </p>
+            <Button
+              type="submit"
+              loading={changePassword.isPending}
+              disabled={!currentPassword || !newPassword || !confirmPassword}
+            >
+              <Lock className="size-4" />
+              更新密码
+            </Button>
+          </div>
+        </form>
+
+        {passwordError ? (
+          <p className="mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-300">
+            {passwordError}
+          </p>
+        ) : null}
+        {changePassword.isSuccess ? (
+          <p className="mt-3 flex items-center gap-1.5 rounded-xl border border-accent/20 bg-accent/[0.08] px-3 py-2 text-sm text-accent">
+            <CheckCircle2 className="size-4" />
+            管理员密码已更新。
+          </p>
+        ) : null}
+      </Card>
     </div>
   )
 }

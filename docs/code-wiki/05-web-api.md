@@ -5,7 +5,7 @@
 ## 1. 认证机制
 
 - 使用 Starlette `SessionMiddleware`，`secret_key` 来自 `config.toml`（缺省则每次启动随机生成），`same_site="lax"`。
-- 登录：`POST /api/auth/login`，JSON `{"password": "..."}`；使用 `secrets.compare_digest` 与 `settings.admin_password` 比较，成功写入 `request.session["authenticated"] = True`。
+- 登录：`POST /api/auth/login`，JSON `{"password": "..."}`；优先与数据库 `app_settings.admin_password_hash`（PBKDF2）比对，未改密时回退到 `settings.admin_password`（`secrets.compare_digest`），成功写入 `request.session["authenticated"] = True`。
 - 登出：`POST /api/auth/logout` 清空会话。
 - 会话探测：`GET /api/auth/session` 返回 `{"authenticated": bool}`，供 SPA 判断是否跳转登录页。
 - 除登录与会话探测外，所有 `/api/*` 路由都依赖 `require_auth`，未登录返回 `401 {"error": "请先登录后再操作。"}`。
@@ -33,6 +33,7 @@
 | GET | `/api/apps/{app_id}/logs` | 需要 | `{"logs": "<tail>"}` |
 | GET | `/api/settings` | 需要 | 镜像源预设、当前选择与生效 URL |
 | PUT | `/api/settings` | 需要 | JSON `{"source", "custom_url"}`；校验失败 400；成功返回最新设置 |
+| PUT | `/api/settings/password` | 需要 | JSON `{"current_password", "new_password"}`；当前密码错误/新密码不足 8 位/与原密码相同返回 400；成功返回 `{"ok": true}` |
 | GET | `/{full_path:path}` | 无 | SPA 入口（见第 4 节） |
 
 `ManagedApp` JSON 结构：

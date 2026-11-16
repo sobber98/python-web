@@ -16,9 +16,15 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import load_settings
-from app.database import AppRepository, PIP_INDEX_URL_SETTING_KEY, PIP_INDEX_SELECTOR_SETTING_KEY
+from app.database import (
+    ADMIN_PASSWORD_HASH_SETTING_KEY,
+    AppRepository,
+    PIP_INDEX_URL_SETTING_KEY,
+    PIP_INDEX_SELECTOR_SETTING_KEY,
+)
 from app.dependency_inference import infer_dependencies
 from app.models import ManagedApp
+from app.passwords import hash_password, verify_password
 from app.pip_mirror import (
     OFFICIAL_INDEX,
     PIP_MIRROR_PRESETS,
@@ -88,6 +94,11 @@ class SettingsPayload(BaseModel):
     custom_url: str = ""
 
 
+class PasswordPayload(BaseModel):
+    current_password: str
+    new_password: str
+
+
 def is_authenticated(request: Request) -> bool:
     return bool(request.session.get("authenticated"))
 
@@ -99,8 +110,20 @@ def require_auth(request: Request) -> None:
 
 LOGIN_MAX_FAILURES = 5
 LOGIN_WINDOW_SECONDS = 60.0
+PASSWORD_MIN_LENGTH = 8
 _login_failures: dict[str, list[float]] = {}
 _login_failures_lock = threading.Lock()
+
+
+def _password_matches(candidate: str) -> bool:
+    # 后台改过的密码以 PBKDF2 哈希存于数据库，未改过时回退到 config.toml 中的初始密码。
+    stored_hash = repo.get_setting(ADMIN_PASSWORD_HASH_SETTING_KEY)
+    if stored_hash:
+        return verify_password(candidate, stored_hash)
+    return secrets.compare_digest(
+        candidate.encode("utf-8"),
+        settings.admin_password.encode("utf-8"),
+    )
 
 
 def _client_key(request: Request) -> str:
@@ -198,10 +221,7 @@ def auth_login(request: Request, payload: LoginPayload) -> dict[str, bool]:
     client_key = _client_key(request)
     if _login_rate_limited(client_key):
         raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试。")
-    password_matches = secrets.compare_digest(
-        payload.password.encode("utf-8"),
-        settings.admin_password.encode("utf-8"),
-    )
+    password_matches = _password_matches(payload.password)
     if not password_matches:
         _record_login_failure(client_key)
         raise HTTPException(status_code=401, detail="密码错误，请重试。")
@@ -378,6 +398,25 @@ def update_settings(payload: SettingsPayload, _: None = Depends(require_auth)) -
     repo.set_setting(PIP_INDEX_SELECTOR_SETTING_KEY, payload.source)
     repo.set_setting(PIP_INDEX_URL_SETTING_KEY, url)
     return settings_payload()
+
+
+@app.put("/api/settings/password")
+def update_admin_password(payload: PasswordPayload, _: None = Depends(require_auth)) -> dict[str, bool]:
+    if not _password_matches(payload.current_password):
+        raise HTTPException(status_code=400, detail="当前密码不正确。")
+    if len(payload.new_password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"新密码至少需要 {PASSWORD_MIN_LENGTH} 个字符。",
+        )
+    if secrets.compare_digest(
+        payload.new_password.encode("utf-8"),
+        payload.current_password.encode("utf-8"),
+    ):
+        raise HTTPException(status_code=400, detail="新密码不能与当前密码相同。")
+
+    repo.set_setting(ADMIN_PASSWORD_HASH_SETTING_KEY, hash_password(payload.new_password))
+    return {"ok": True}
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

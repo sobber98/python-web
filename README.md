@@ -5,6 +5,7 @@ A FastAPI + React web platform for trusted administrators to upload and run mult
 ## Features
 
 - Admin password login with signed session cookies.
+- Change the admin password from the settings page (stored as a PBKDF2 hash in SQLite).
 - Multiple managed Python apps.
 - `.py` upload with automatic dependency inference, reinstall, and restart.
 - Per-app virtual environment, process state, and log file.
@@ -135,7 +136,7 @@ docker compose -f docker-compose.prod.yml down
 
 ## Configuration
 
-- `admin_password`: required admin login password.
+- `admin_password`: initial admin login password and required bootstrap secret. After you change the password from the settings page, the PBKDF2 hash stored in the database takes precedence, and the value in `config.toml` is no longer used for login.
 - `secret_key`: optional session signing key. If omitted, a random key is generated at startup, which invalidates existing sessions after restart.
 - `data_dir`: runtime data directory. Defaults to `data`.
 - `db_path`: SQLite path. Defaults to `<data_dir>/manager.db`.

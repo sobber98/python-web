@@ -103,24 +103,35 @@ describe('DashboardPage', () => {
 })
 
 describe('SettingsPage', () => {
+  const settingsPayload = {
+    presets: [
+      { key: 'official', label: 'PyPI 官方源', url: 'https://pypi.org/simple' },
+      { key: 'tsinghua', label: '清华大学', url: 'https://pypi.tuna.tsinghua.edu.cn/simple' },
+      { key: 'custom', label: '自定义', url: '' },
+    ],
+    selector: 'official',
+    custom_url: '',
+    effective_url: 'https://pypi.org/simple',
+  }
+
   it('渲染 pip 镜像源预设', async () => {
-    stubApi({
-      '/api/settings': {
-        presets: [
-          { key: 'official', label: 'PyPI 官方源', url: 'https://pypi.org/simple' },
-          { key: 'tsinghua', label: '清华大学', url: 'https://pypi.tuna.tsinghua.edu.cn/simple' },
-          { key: 'custom', label: '自定义', url: '' },
-        ],
-        selector: 'official',
-        custom_url: '',
-        effective_url: 'https://pypi.org/simple',
-      },
-    })
+    stubApi({ '/api/settings': settingsPayload })
     renderPage(<SettingsPage />, '/settings')
 
     expect(await screen.findByText('pip 镜像源')).toBeInTheDocument()
     expect(await screen.findByText('PyPI 官方源')).toBeInTheDocument()
     expect(screen.getByText('清华大学')).toBeInTheDocument()
     expect(screen.getByText('自定义')).toBeInTheDocument()
+  })
+
+  it('渲染修改管理员密码表单', async () => {
+    stubApi({ '/api/settings': settingsPayload })
+    renderPage(<SettingsPage />, '/settings')
+
+    expect(await screen.findByText('修改管理员密码')).toBeInTheDocument()
+    expect(screen.getByLabelText('当前密码')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^新密码/)).toBeInTheDocument()
+    expect(screen.getByLabelText('确认新密码')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /更新密码/ })).toBeInTheDocument()
   })
 })

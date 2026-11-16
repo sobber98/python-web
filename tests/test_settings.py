@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from unittest import mock
 
-from app.database import AppRepository, PIP_INDEX_URL_SETTING_KEY
+from app.database import ADMIN_PASSWORD_HASH_SETTING_KEY, AppRepository, PIP_INDEX_URL_SETTING_KEY
 from app.process_manager import ProcessManager
 
 
@@ -102,6 +102,92 @@ def test_update_settings_rejects_unknown_source(monkeypatch, tmp_path: Path) -> 
 
     assert rejected.status_code == 400
     assert rejected.json() == {"error": "未知的镜像源选项。"}
+
+
+def test_change_password_requires_auth(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    response = client.put(
+        "/api/settings/password",
+        json={"current_password": "secret", "new_password": "new-secret-1"},
+    )
+
+    assert response.status_code == 401
+    assert main.repo.get_setting(ADMIN_PASSWORD_HASH_SETTING_KEY) == ""
+
+
+def test_change_password_rejects_wrong_current_password(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    with client:
+        _login(client)
+        rejected = client.put(
+            "/api/settings/password",
+            json={"current_password": "wrong", "new_password": "new-secret-1"},
+        )
+
+    assert rejected.status_code == 400
+    assert rejected.json() == {"error": "当前密码不正确。"}
+    assert main.repo.get_setting(ADMIN_PASSWORD_HASH_SETTING_KEY) == ""
+
+
+def test_change_password_validates_new_password(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    with client:
+        _login(client)
+        too_short = client.put(
+            "/api/settings/password",
+            json={"current_password": "secret", "new_password": "short"},
+        )
+        assert too_short.status_code == 400
+        assert "8" in too_short.json()["error"]
+        assert main.repo.get_setting(ADMIN_PASSWORD_HASH_SETTING_KEY) == ""
+
+        changed = client.put(
+            "/api/settings/password",
+            json={"current_password": "secret", "new_password": "new-secret-1"},
+        )
+        assert changed.status_code == 200
+        unchanged = client.put(
+            "/api/settings/password",
+            json={"current_password": "new-secret-1", "new_password": "new-secret-1"},
+        )
+
+    assert unchanged.status_code == 400
+    assert unchanged.json() == {"error": "新密码不能与当前密码相同。"}
+
+
+def test_change_password_updates_login_credentials(monkeypatch, tmp_path: Path) -> None:
+    main = _reload_main_with(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    with client:
+        _login(client)
+        changed = client.put(
+            "/api/settings/password",
+            json={"current_password": "secret", "new_password": "new-secret-1"},
+        )
+        assert changed.status_code == 200
+        assert changed.json() == {"ok": True}
+        assert client.get("/api/auth/session").json() == {"authenticated": True}
+        client.post("/api/auth/logout")
+
+        old_rejected = client.post("/api/auth/login", json={"password": "secret"})
+        new_accepted = client.post("/api/auth/login", json={"password": "new-secret-1"})
+
+    assert old_rejected.status_code == 401
+    assert new_accepted.status_code == 200
+    stored = main.repo.get_setting(ADMIN_PASSWORD_HASH_SETTING_KEY)
+    assert stored.startswith("pbkdf2_sha256$")
+    assert "new-secret-1" not in stored
 
 
 def test_install_dependencies_appends_index_url(tmp_path: Path) -> None:

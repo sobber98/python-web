@@ -42,6 +42,7 @@
 
 - `PIP_INDEX_URL_SETTING_KEY: str = "pip_index_url"`
 - `PIP_INDEX_SELECTOR_SETTING_KEY: str = "pip_index_selector"`
+- `ADMIN_PASSWORD_HASH_SETTING_KEY: str = "admin_password_hash"`（后台修改密码后写入的 PBKDF2 哈希）
 
 ### `class AppRepository`
 

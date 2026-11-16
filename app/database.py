@@ -11,6 +11,7 @@ from app.models import ManagedApp
 
 PIP_INDEX_URL_SETTING_KEY = "pip_index_url"
 PIP_INDEX_SELECTOR_SETTING_KEY = "pip_index_selector"
+ADMIN_PASSWORD_HASH_SETTING_KEY = "admin_password_hash"
 
 
 class AppRepository:

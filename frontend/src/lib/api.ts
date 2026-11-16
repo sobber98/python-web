@@ -93,4 +93,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ source, custom_url: customUrl }),
     }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<ApiMessageResponse>('/api/settings/password', {
+      method: 'PUT',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 }

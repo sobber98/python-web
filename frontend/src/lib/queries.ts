@@ -103,6 +103,18 @@ export function useSaveSettings() {
   })
 }
 
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: ({
+      currentPassword,
+      newPassword,
+    }: {
+      currentPassword: string
+      newPassword: string
+    }) => api.changePassword(currentPassword, newPassword),
+  })
+}
+
 interface UploadState {
   active: boolean
   percent: number

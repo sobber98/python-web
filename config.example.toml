@@ -1,5 +1,8 @@
 # Copy this file to config.toml and edit local secrets before starting.
 
+# Bootstrap admin password. It is required at startup, and it stays valid until
+# you change the password from the settings page. After a change, the PBKDF2
+# hash stored in the database takes precedence and this value is ignored.
 admin_password = "change-me"
 
 # Optional. If omitted, sessions are invalidated on each server restart.
