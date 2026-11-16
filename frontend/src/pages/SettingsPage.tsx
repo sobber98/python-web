@@ -240,30 +240,28 @@ export function SettingsPage() {
             </p>
           </Card>
         </div>
-      </div>
 
-      <Card className="mt-5 p-6">
-        <CardHeader
-          title="修改管理员密码"
-          description="修改后立即生效，当前登录会话保持有效，后续登录请使用新密码。"
-          icon={<KeyRound className="size-4" />}
-        />
-        <form className="mt-5 grid gap-4" onSubmit={submitPassword}>
-          <Field label="当前密码" htmlFor="current-password">
-            <input
-              id="current-password"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => {
-                setCurrentPassword(event.target.value)
-                clearPasswordFeedback()
-              }}
-              className={inputClassName}
-            />
-          </Field>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="新密码" htmlFor="new-password" hint="至少 8 个字符。">
+        <Card className="p-6 xl:col-start-1">
+          <CardHeader
+            title="修改管理员密码"
+            description="修改后立即生效，当前登录会话保持有效。密码以 PBKDF2-SHA256 哈希存储，config.toml 中的初始密码仅在首次修改前生效。"
+            icon={<KeyRound className="size-4" />}
+          />
+          <form className="mt-5 grid content-start gap-4" onSubmit={submitPassword}>
+            <Field label="当前密码" htmlFor="current-password">
+              <input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => {
+                  setCurrentPassword(event.target.value)
+                  clearPasswordFeedback()
+                }}
+                className={inputClassName}
+              />
+            </Field>
+            <Field label="新密码" htmlFor="new-password" hint="至少 8 个字符，建议混用大小写字母与符号。">
               <input
                 id="new-password"
                 type="password"
@@ -289,34 +287,32 @@ export function SettingsPage() {
                 className={inputClassName}
               />
             </Field>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs leading-relaxed text-slate-500">
-              密码以 PBKDF2 哈希存储在数据库中；config.toml 中的初始密码仅在首次修改前生效。
-            </p>
-            <Button
-              type="submit"
-              loading={changePassword.isPending}
-              disabled={!currentPassword || !newPassword || !confirmPassword}
-            >
-              <Lock className="size-4" />
-              更新密码
-            </Button>
-          </div>
-        </form>
 
-        {passwordError ? (
-          <p className="mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-300">
-            {passwordError}
-          </p>
-        ) : null}
-        {changePassword.isSuccess ? (
-          <p className="mt-3 flex items-center gap-1.5 rounded-xl border border-accent/20 bg-accent/[0.08] px-3 py-2 text-sm text-accent">
-            <CheckCircle2 className="size-4" />
-            管理员密码已更新。
-          </p>
-        ) : null}
-      </Card>
+            {passwordError ? (
+              <p className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-300">
+                {passwordError}
+              </p>
+            ) : null}
+            {changePassword.isSuccess ? (
+              <p className="flex items-center gap-1.5 rounded-xl border border-accent/20 bg-accent/[0.08] px-3 py-2 text-sm text-accent">
+                <CheckCircle2 className="size-4" />
+                管理员密码已更新。
+              </p>
+            ) : null}
+
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                loading={changePassword.isPending}
+                disabled={!currentPassword || !newPassword || !confirmPassword}
+              >
+                <Lock className="size-4" />
+                更新密码
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
     </div>
   )
 }
