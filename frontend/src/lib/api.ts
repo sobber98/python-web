@@ -1,6 +1,9 @@
 import type {
   ApiMessageResponse,
   AppListResponse,
+  GithubDeployResponse,
+  GithubImportResponse,
+  GithubSettingsResponse,
   LogsResponse,
   ManagedApp,
   SessionResponse,
@@ -97,5 +100,30 @@ export const api = {
     request<ApiMessageResponse>('/api/settings/password', {
       method: 'PUT',
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
+
+  githubSettings: () => request<GithubSettingsResponse>('/api/github'),
+  saveGithubSettings: (payload: {
+    token?: string
+    webhook_secret?: string
+    regenerate_webhook_secret?: boolean
+  }) =>
+    request<GithubSettingsResponse>('/api/github', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  importGithubRepo: (repoUrl: string, branch: string, manualDependencies: string) =>
+    request<GithubImportResponse>('/api/github/import', {
+      method: 'POST',
+      body: JSON.stringify({
+        repo_url: repoUrl,
+        branch,
+        manual_dependencies: manualDependencies,
+      }),
+    }),
+  redeployGithub: (appId: number, manualDependencies?: string) =>
+    request<GithubDeployResponse>(`/api/apps/${appId}/github/deploy`, {
+      method: 'POST',
+      body: JSON.stringify({ manual_dependencies: manualDependencies ?? null }),
     }),
 }

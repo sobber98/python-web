@@ -1,5 +1,16 @@
 import clsx from 'clsx'
-import { Check, CheckCircle2, Globe2, Info, KeyRound, Lock, Save, Settings2 } from 'lucide-react'
+import {
+  Check,
+  CheckCircle2,
+  Github,
+  Globe2,
+  Info,
+  KeyRound,
+  Lock,
+  RefreshCw,
+  Save,
+  Settings2,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 
@@ -7,7 +18,13 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Field, inputClassName } from '@/components/ui/Field'
 import { ApiError } from '@/lib/api'
-import { useChangePassword, useSaveSettings, useSettings } from '@/lib/queries'
+import {
+  useChangePassword,
+  useGithubSettings,
+  useSaveGithubSettings,
+  useSaveSettings,
+  useSettings,
+} from '@/lib/queries'
 
 export function SettingsPage() {
   const settingsQuery = useSettings()
@@ -73,6 +90,23 @@ export function SettingsPage() {
       changePassword.reset()
     }
   }
+
+  const githubQuery = useGithubSettings()
+  const saveGithub = useSaveGithubSettings()
+  const [githubToken, setGithubToken] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
+
+  useEffect(() => {
+    if (!githubQuery.data) return
+    setWebhookSecret(githubQuery.data.webhook_secret)
+  }, [githubQuery.data])
+
+  const saveGithubFeedback =
+    saveGithub.error instanceof ApiError
+      ? saveGithub.error.message
+      : saveGithub.error
+        ? '保存 GitHub 设置失败，请稍后重试。'
+        : ''
 
   const submitPassword = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -311,6 +345,114 @@ export function SettingsPage() {
               </Button>
             </div>
           </form>
+        </Card>
+
+        <Card className="p-6 xl:col-start-1">
+          <CardHeader
+            title="GitHub 集成"
+            description="配置私有仓库访问 Token 与 Webhook 密钥，用于从 GitHub 拉取代码并在 push 后自动部署。"
+            icon={<Github className="size-4" />}
+          />
+
+          <div className="mt-5 grid gap-4">
+            <Field
+              label="GitHub Token"
+              htmlFor="github-token"
+              hint={
+                githubQuery.data?.token_configured
+                  ? `已保存 ${githubQuery.data.token_hint}，留空表示保持不变。`
+                  : '未配置 Token 时只能部署公开仓库；建议使用只读权限的细粒度 Token。'
+              }
+            >
+              <input
+                id="github-token"
+                type="password"
+                autoComplete="off"
+                value={githubToken}
+                onChange={(event) => setGithubToken(event.target.value)}
+                placeholder={githubQuery.data?.token_configured ? '••••••••••••' : 'github_pat_...'}
+                className={clsx(inputClassName, 'font-mono')}
+              />
+            </Field>
+
+            <Field
+              label="Webhook 地址"
+              htmlFor="github-webhook-url"
+              hint="在仓库 Settings → Webhooks 中填写该地址，Content type 选择 application/json。"
+            >
+              <input
+                id="github-webhook-url"
+                readOnly
+                value={githubQuery.data?.webhook_url ?? ''}
+                className={clsx(inputClassName, 'break-all font-mono text-xs text-slate-400')}
+              />
+            </Field>
+
+            <Field
+              label="Webhook 密钥"
+              htmlFor="github-webhook-secret"
+              hint="GitHub 会用它生成 X-Hub-Signature-256 签名；留空并保存可停用 Webhook。"
+            >
+              <input
+                id="github-webhook-secret"
+                value={webhookSecret}
+                onChange={(event) => setWebhookSecret(event.target.value)}
+                spellCheck={false}
+                className={clsx(inputClassName, 'font-mono text-xs')}
+              />
+            </Field>
+
+            {saveGithubFeedback ? (
+              <p className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-300">
+                {saveGithubFeedback}
+              </p>
+            ) : null}
+            {saveGithub.isSuccess ? (
+              <p className="flex items-center gap-1.5 rounded-xl border border-accent/20 bg-accent/[0.08] px-3 py-2 text-sm text-accent">
+                <CheckCircle2 className="size-4" />
+                GitHub 集成设置已保存。
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={saveGithub.isPending}
+                onClick={() => {
+                  setGithubToken('')
+                  saveGithub.mutate({ token: '' })
+                }}
+              >
+                <RefreshCw className="size-4" />
+                清除 Token
+              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={saveGithub.isPending}
+                  onClick={() => saveGithub.mutate({ regenerate_webhook_secret: true })}
+                >
+                  <RefreshCw className="size-4" />
+                  重新生成密钥
+                </Button>
+                <Button
+                  size="sm"
+                  loading={saveGithub.isPending}
+                  onClick={() =>
+                    saveGithub.mutate({
+                      token: githubToken.trim() || undefined,
+                      webhook_secret: webhookSecret.trim(),
+                    })
+                  }
+                >
+                  <Save className="size-4" />
+                  保存 GitHub 设置
+                </Button>
+              </div>
+            </div>
+          </div>
         </Card>
       </div>
     </div>

@@ -12,6 +12,10 @@ const SettingsPage = lazy(() =>
   import('@/pages/SettingsPage').then((module) => ({ default: module.SettingsPage })),
 )
 
+const GithubPage = lazy(() =>
+  import('@/pages/GithubPage').then((module) => ({ default: module.GithubPage })),
+)
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -32,6 +36,16 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/apps/:appId" element={<DashboardPage />} />
+              <Route
+                path="/github"
+                element={
+                  <Suspense
+                    fallback={<div className="h-40 animate-pulse rounded-3xl bg-white/[0.03]" />}
+                  >
+                    <GithubPage />
+                  </Suspense>
+                }
+              />
               <Route
                 path="/settings"
                 element={

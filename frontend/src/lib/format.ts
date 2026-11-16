@@ -11,6 +11,8 @@ export const STATUS_LABELS: Record<AppStatus, string> = {
 
 export const PROGRESS_STAGE_LABELS: Record<string, string> = {
   idle: '空闲',
+  queued: '排队中',
+  github: '拉取仓库',
   upload_received: '已接收上传',
   parsing: '解析依赖',
   venv: '准备虚拟环境',

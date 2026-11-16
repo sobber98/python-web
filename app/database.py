@@ -12,6 +12,8 @@ from app.models import ManagedApp
 PIP_INDEX_URL_SETTING_KEY = "pip_index_url"
 PIP_INDEX_SELECTOR_SETTING_KEY = "pip_index_selector"
 ADMIN_PASSWORD_HASH_SETTING_KEY = "admin_password_hash"
+GITHUB_TOKEN_SETTING_KEY = "github_token"
+GITHUB_WEBHOOK_SECRET_SETTING_KEY = "github_webhook_secret"
 
 
 class AppRepository:
@@ -65,6 +67,11 @@ class AppRepository:
                     "progress_stage": "TEXT NOT NULL DEFAULT 'idle'",
                     "progress_percent": "INTEGER NOT NULL DEFAULT 0",
                     "progress_message": "TEXT NOT NULL DEFAULT ''",
+                    "source_type": "TEXT NOT NULL DEFAULT 'upload'",
+                    "source_repo": "TEXT NOT NULL DEFAULT ''",
+                    "source_branch": "TEXT NOT NULL DEFAULT ''",
+                    "source_path": "TEXT NOT NULL DEFAULT ''",
+                    "source_commit": "TEXT NOT NULL DEFAULT ''",
                 },
             )
             conn.execute(
@@ -128,10 +135,67 @@ class AppRepository:
                 """
                 UPDATE managed_apps
                 SET script_name = ?, manual_dependencies = ?, inferred_dependencies = ?,
+                    source_type = 'upload', source_repo = '', source_branch = '',
+                    source_path = '', source_commit = '',
                     status = 'installing', last_error = '', updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
                 (script_name, manual_dependencies, "\n".join(inferred_dependencies), app_id),
+            )
+
+    def update_source(
+        self,
+        app_id: int,
+        *,
+        script_name: str,
+        manual_dependencies: str,
+        inferred_dependencies: list[str],
+        source_repo: str,
+        source_branch: str,
+        source_path: str,
+        source_commit: str,
+    ) -> None:
+        with self._connection() as conn:
+            conn.execute(
+                """
+                UPDATE managed_apps
+                SET script_name = ?, manual_dependencies = ?, inferred_dependencies = ?,
+                    source_type = 'github', source_repo = ?, source_branch = ?,
+                    source_path = ?, source_commit = ?,
+                    status = 'installing', last_error = '', updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    script_name,
+                    manual_dependencies,
+                    "\n".join(inferred_dependencies),
+                    source_repo,
+                    source_branch,
+                    source_path,
+                    source_commit,
+                    app_id,
+                ),
+            )
+
+    def set_source_origin(
+        self,
+        app_id: int,
+        *,
+        source_repo: str,
+        source_branch: str,
+        source_path: str,
+        source_commit: str,
+    ) -> None:
+        # 导入后立即标记来源，Webhook 与列表在首次部署完成前也能识别 GitHub 应用。
+        with self._connection() as conn:
+            conn.execute(
+                """
+                UPDATE managed_apps
+                SET source_type = 'github', source_repo = ?, source_branch = ?,
+                    source_path = ?, source_commit = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (source_repo, source_branch, source_path, source_commit, app_id),
             )
 
     def set_status(self, app_id: int, status: str, last_error: str = "", pid: int | None = None) -> None:
@@ -230,6 +294,11 @@ class AppRepository:
             progress_stage=str(row["progress_stage"]),
             progress_percent=int(row["progress_percent"]),
             progress_message=str(row["progress_message"]),
+            source_type=str(row["source_type"]),
+            source_repo=str(row["source_repo"]),
+            source_branch=str(row["source_branch"]),
+            source_path=str(row["source_path"]),
+            source_commit=str(row["source_commit"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )

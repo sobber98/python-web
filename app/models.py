@@ -18,6 +18,11 @@ class ManagedApp:
     progress_stage: str
     progress_percent: int
     progress_message: str
+    source_type: str
+    source_repo: str
+    source_branch: str
+    source_path: str
+    source_commit: str
     created_at: str
     updated_at: str
 

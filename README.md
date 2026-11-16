@@ -8,6 +8,9 @@ A FastAPI + React web platform for trusted administrators to upload and run mult
 - Change the admin password from the settings page (stored as a PBKDF2 hash in SQLite).
 - Multiple managed Python apps.
 - `.py` upload with automatic dependency inference, reinstall, and restart.
+- Deploy Python apps directly from GitHub repositories (public or private).
+- Optional GitHub webhook to redeploy automatically on push.
+- Multi-file apps: a directory of Python files is deployed as one app.
 - Per-app virtual environment, process state, and log file.
 - Start, stop, restart, download, and delete controls.
 - Upload progress and backend install progress shown separately.
@@ -143,6 +146,34 @@ docker compose -f docker-compose.prod.yml down
 - `session_max_age`: session lifetime in seconds. Defaults to 12 hours.
 - `session_https_only`: set to `true` when served over HTTPS so the session cookie is HTTPS-only. Defaults to `false`.
 - `max_upload_bytes`: maximum uploaded script size in bytes. Defaults to 10 MiB.
+
+## GitHub Deployment
+
+Open **GitHub 部署** in the console, enter a repository URL (`https://github.com/owner/repo`,
+`git@github.com:owner/repo.git`, or `owner/repo`) and an optional branch, then click deploy.
+The repository is downloaded as a tarball and the Python sources are synced into app directories.
+
+Repository conventions:
+
+- Every top-level `.py` file becomes its own managed app.
+- Every top-level directory containing `.py` files becomes one app. The entry file is resolved in
+  order: `main.py`, `app.py`, `run.py`, `__main__.py`, or the only top-level `.py` file.
+- A `requirements.txt` inside the app directory is merged with inferred imports. For single-file
+  apps, the repository-root `requirements.txt` is used.
+- `tests`, `test`, `docs`, `examples`, `.github`, `venv`, `.venv`, and hidden directories are skipped.
+- Re-importing the same repository updates existing apps in place instead of creating duplicates.
+- Uploading a `.py` file manually replaces the GitHub source for that app.
+
+Private repositories: save a GitHub token in **系统设置 → GitHub 集成**. The token is stored in the
+SQLite settings table; prefer a read-only fine-grained token.
+
+Webhook auto-deploy: copy the webhook URL and secret from the same settings card into the
+repository's **Settings → Webhooks** (Content type `application/json`, event: `push`). Pushes to the
+app's deployment branch trigger a background redeploy; signature verification uses
+`X-Hub-Signature-256`. If the default branch could not be resolved, pushes to any branch trigger a
+redeploy.
+
+Limits: 100 MB archive, 500 MB extracted, 5000 archive entries, and a 120-second download timeout.
 
 ## Security Scope
 

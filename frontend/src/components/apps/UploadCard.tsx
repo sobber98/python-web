@@ -1,13 +1,14 @@
 import clsx from 'clsx'
-import { CheckCircle2, FileCode2, UploadCloud, X } from 'lucide-react'
+import { CheckCircle2, FileCode2, Github, RotateCw, UploadCloud, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Field, inputClassName } from '@/components/ui/Field'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { ApiError } from '@/lib/api'
 import { PROGRESS_STAGE_LABELS, formatBytes } from '@/lib/format'
-import { useUploadScript } from '@/lib/queries'
+import { useGithubRedeploy, useUploadScript } from '@/lib/queries'
 import type { ManagedApp } from '@/types'
 
 interface UploadCardProps {
@@ -21,6 +22,14 @@ export function UploadCard({ app }: UploadCardProps) {
   const [localError, setLocalError] = useState('')
   const [manualDependencies, setManualDependencies] = useState(app.dependencies.manual.join('\n'))
   const upload = useUploadScript(app.id)
+  const redeploy = useGithubRedeploy()
+  const githubSource = app.source.type === 'github' ? app.source : null
+  const redeployError =
+    redeploy.error instanceof ApiError
+      ? redeploy.error.message
+      : redeploy.error
+        ? '拉取最新代码失败，请稍后重试。'
+        : ''
 
   const pickFile = (nextFile: File | undefined) => {
     if (!nextFile) return
@@ -55,6 +64,47 @@ export function UploadCard({ app }: UploadCardProps) {
       />
 
       <div className="mt-5 grid gap-4">
+        {githubSource ? (
+          <div className="grid gap-3 rounded-2xl border border-accent/20 bg-accent/[0.06] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2 text-sm font-medium text-white">
+                <Github className="size-4 text-accent" />
+                GitHub 来源
+              </span>
+              <span className="font-mono text-[11px] text-slate-400">
+                {githubSource.branch}
+                {githubSource.commit ? ` · ${githubSource.commit.slice(0, 7)}` : ''}
+              </span>
+            </div>
+            <p className="break-all font-mono text-xs text-slate-300">
+              {githubSource.repo}/{githubSource.path}
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-slate-500">手动上传会覆盖 GitHub 来源并切换为本地脚本。</p>
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={redeploy.isPending}
+                onClick={() => redeploy.mutate({ appId: app.id })}
+              >
+                <RotateCw className="size-3.5" />
+                拉取最新代码
+              </Button>
+            </div>
+            {redeploy.isSuccess ? (
+              <p className="flex items-center gap-1.5 text-xs text-accent">
+                <CheckCircle2 className="size-3.5" />
+                已拉取 {redeploy.data.commit ? redeploy.data.commit.slice(0, 7) : redeploy.data.branch}，正在后台重新部署。
+              </p>
+            ) : null}
+            {redeployError ? (
+              <p className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs text-rose-300">
+                {redeployError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         <input
           ref={inputRef}
           type="file"

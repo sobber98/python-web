@@ -76,3 +76,5 @@ def test_existing_database_is_migrated_with_progress_defaults(tmp_path) -> None:
     assert migrated.progress_stage == "idle"
     assert migrated.progress_percent == 0
     assert migrated.progress_message == ""
+    assert migrated.source_type == "upload"
+    assert migrated.source_repo == ""

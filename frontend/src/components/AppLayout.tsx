@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { LayoutGrid, LogOut, Settings } from 'lucide-react'
+import { Github, LayoutGrid, LogOut, Settings } from 'lucide-react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { Logo, NavItem } from '@/components/Logo'
@@ -11,6 +11,7 @@ export function AppLayout() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const isAppsActive = location.pathname === '/' || location.pathname.startsWith('/apps')
+  const isGithubActive = location.pathname.startsWith('/github')
   const isSettingsActive = location.pathname.startsWith('/settings')
 
   const logout = useMutation({
@@ -30,6 +31,12 @@ export function AppLayout() {
             <nav className="hidden items-center gap-1 sm:flex">
               <NavItem to="/" active={isAppsActive} icon={<LayoutGrid className="size-4" />} label="应用" />
               <NavItem
+                to="/github"
+                active={isGithubActive}
+                icon={<Github className="size-4" />}
+                label="GitHub 部署"
+              />
+              <NavItem
                 to="/settings"
                 active={isSettingsActive}
                 icon={<Settings className="size-4" />}
@@ -40,6 +47,12 @@ export function AppLayout() {
           <div className="flex items-center gap-2">
             <nav className="flex items-center gap-1 sm:hidden">
               <NavItem to="/" active={isAppsActive} icon={<LayoutGrid className="size-4" />} label="应用" />
+              <NavItem
+                to="/github"
+                active={isGithubActive}
+                icon={<Github className="size-4" />}
+                label="GitHub"
+              />
               <NavItem
                 to="/settings"
                 active={isSettingsActive}

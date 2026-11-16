@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import secrets
+import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -19,10 +24,25 @@ from app.config import load_settings
 from app.database import (
     ADMIN_PASSWORD_HASH_SETTING_KEY,
     AppRepository,
+    GITHUB_TOKEN_SETTING_KEY,
+    GITHUB_WEBHOOK_SECRET_SETTING_KEY,
     PIP_INDEX_URL_SETTING_KEY,
     PIP_INDEX_SELECTOR_SETTING_KEY,
 )
-from app.dependency_inference import infer_dependencies
+from app.dependency_inference import (
+    infer_dependencies,
+    infer_dependencies_for_tree,
+    merge_dependencies,
+    parse_requirements_file,
+)
+from app.github import (
+    GitHubError,
+    RepoSnapshot,
+    discover_apps,
+    fetch_snapshot,
+    parse_repo_slug,
+    validate_branch,
+)
 from app.models import ManagedApp
 from app.passwords import hash_password, verify_password
 from app.pip_mirror import (
@@ -99,6 +119,34 @@ class PasswordPayload(BaseModel):
     new_password: str
 
 
+class GithubSettingsPayload(BaseModel):
+    token: str | None = None
+    webhook_secret: str | None = None
+    regenerate_webhook_secret: bool = False
+
+
+class GithubImportPayload(BaseModel):
+    repo_url: str
+    branch: str = ""
+    manual_dependencies: str = ""
+
+
+class GithubDeployPayload(BaseModel):
+    branch: str = ""
+    manual_dependencies: str | None = None
+
+
+# 重新部署时保留运行环境与日志，只替换源码文件。
+PRESERVED_APP_ENTRIES = {
+    ".venv",
+    "runtime.log",
+    "runtime.log.1",
+    "install.log",
+    "install.log.1",
+    ".deps-hash",
+}
+
+
 def is_authenticated(request: Request) -> bool:
     return bool(request.session.get("authenticated"))
 
@@ -165,6 +213,13 @@ def app_payload(managed_app: ManagedApp) -> dict[str, object]:
             "inferred": managed_app.inferred_list,
             "manual": managed_app.manual_list,
         },
+        "source": {
+            "type": managed_app.source_type,
+            "repo": managed_app.source_repo,
+            "branch": managed_app.source_branch,
+            "path": managed_app.source_path,
+            "commit": managed_app.source_commit,
+        },
         "created_at": managed_app.created_at,
         "updated_at": managed_app.updated_at,
     }
@@ -189,6 +244,186 @@ def settings_payload() -> dict[str, object]:
         "custom_url": custom_url,
         "effective_url": effective_url,
     }
+
+
+def github_settings_payload(request: Request) -> dict[str, object]:
+    token = repo.get_setting(GITHUB_TOKEN_SETTING_KEY)
+    return {
+        "token_configured": bool(token),
+        "token_hint": f"****{token[-4:]}" if token else "",
+        "webhook_secret": repo.get_setting(GITHUB_WEBHOOK_SECRET_SETTING_KEY),
+        "webhook_url": f"{str(request.base_url).rstrip('/')}/api/github/webhook",
+    }
+
+
+def _substitute_source(source: Path, target_dir: Path) -> None:
+    """用仓库快照替换应用源码，同时保留虚拟环境与日志。"""
+    for child in target_dir.iterdir():
+        if child.name in PRESERVED_APP_ENTRIES:
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
+    if source.is_file():
+        shutil.copy2(source, target_dir / source.name)
+        return
+    for child in source.iterdir():
+        if child.name == ".git":
+            continue
+        destination = target_dir / child.name
+        if child.is_dir():
+            shutil.copytree(child, destination, symlinks=False)
+        else:
+            shutil.copy2(child, destination)
+
+
+def _source_dependencies(source: Path) -> list[str]:
+    if source.is_file():
+        inferred = infer_dependencies(source)
+    else:
+        inferred = infer_dependencies_for_tree(source)
+    requirements_root = source if source.is_dir() else source.parent
+    requirements = "\n".join(parse_requirements_file(requirements_root / "requirements.txt"))
+    return merge_dependencies(inferred, requirements)
+
+
+def _deploy_github_app(
+    app_id: int,
+    source: Path,
+    entry: str,
+    repo_slug: str,
+    branch: str,
+    commit: str,
+    source_path: str,
+    manual_dependencies: str | None,
+) -> None:
+    managed_app = repo.get_app(app_id)
+    if managed_app is None:
+        return
+
+    def progress(stage: str, percent: int, message: str) -> None:
+        repo.set_progress(app_id, stage, percent, message)
+
+    revision = f"{repo_slug}@{commit[:7]}" if commit else f"{repo_slug}@{branch or 'HEAD'}"
+    try:
+        with manager.app_lock(app_id):
+            progress("github", 20, f"已拉取 {revision}，正在停止当前应用...")
+            if not manager.stop(app_id, desired=False, reset_progress=False):
+                progress("failed", 100, "无法停止当前应用，未更新代码。")
+                return
+            repo.set_status(app_id, "installing", pid=None)
+            progress("parsing", 35, "正在同步仓库文件并解析依赖...")
+            target_dir = manager.ensure_app_dir(managed_app)
+            _substitute_source(source, target_dir)
+            if not (target_dir / entry).is_file():
+                raise FileNotFoundError(f"{entry} 在仓库中不存在")
+            repo.update_source(
+                app_id,
+                script_name=entry,
+                manual_dependencies=(
+                    managed_app.manual_dependencies
+                    if manual_dependencies is None
+                    else manual_dependencies
+                ),
+                inferred_dependencies=_source_dependencies(source),
+                source_repo=repo_slug,
+                source_branch=branch,
+                source_path=source_path,
+                source_commit=commit,
+            )
+            progress("venv", 45, "正在准备虚拟环境...")
+            manager.start(app_id, install=True, progress=progress, force_install=True)
+    except SyntaxError as exc:
+        repo.set_status_with_progress(
+            app_id,
+            "error",
+            f"Python syntax error: {exc}",
+            "failed",
+            100,
+            "Python 语法错误，请检查仓库代码。",
+        )
+    except Exception as exc:
+        repo.set_status_with_progress(
+            app_id,
+            "error",
+            f"GitHub deploy failed: {exc}",
+            "failed",
+            100,
+            "GitHub 部署失败，请查看日志。",
+        )
+
+
+def _deploy_github_targets(
+    snapshot: RepoSnapshot,
+    repo_slug: str,
+    branch: str,
+    commit: str,
+    targets: list[tuple[int, str, str]],
+    manual_dependencies: str | None,
+) -> None:
+    try:
+        for app_id, source_path, entry in targets:
+            _deploy_github_app(
+                app_id,
+                snapshot.root / source_path,
+                entry,
+                repo_slug,
+                branch,
+                commit,
+                source_path,
+                manual_dependencies,
+            )
+    finally:
+        snapshot.cleanup()
+
+
+def _redeploy_matching_github_apps(
+    repo_slug: str,
+    branch: str,
+    commit: str,
+    app_ids: list[int],
+) -> None:
+    token = repo.get_setting(GITHUB_TOKEN_SETTING_KEY)
+    workdir = Path(tempfile.mkdtemp(prefix="github-webhook-"))
+    try:
+        snapshot = fetch_snapshot(repo_slug, branch, token, workdir)
+    except GitHubError as exc:
+        shutil.rmtree(workdir, ignore_errors=True)
+        for app_id in app_ids:
+            repo.set_status_with_progress(
+                app_id,
+                "error",
+                f"GitHub webhook deploy failed: {exc}",
+                "failed",
+                100,
+                "Webhook 自动部署失败，请查看日志。",
+            )
+        return
+
+    targets: list[tuple[int, str, str]] = []
+    for app_id in app_ids:
+        managed_app = repo.get_app(app_id)
+        if managed_app is None:
+            continue
+        if not (snapshot.root / managed_app.source_path).exists():
+            repo.set_status_with_progress(
+                app_id,
+                "error",
+                f"GitHub source missing: {managed_app.source_path}",
+                "failed",
+                100,
+                "仓库中已找不到对应文件或目录。",
+            )
+            continue
+        targets.append(
+            (
+                app_id,
+                managed_app.source_path,
+                managed_app.script_name or Path(managed_app.source_path).name,
+            )
+        )
+    _deploy_github_targets(snapshot, repo_slug, snapshot.branch, commit or snapshot.commit, targets, None)
 
 
 def get_app_or_404(app_id: int) -> ManagedApp:
@@ -417,6 +652,205 @@ def update_admin_password(payload: PasswordPayload, _: None = Depends(require_au
 
     repo.set_setting(ADMIN_PASSWORD_HASH_SETTING_KEY, hash_password(payload.new_password))
     return {"ok": True}
+
+
+@app.get("/api/github")
+def get_github_integration(request: Request, _: None = Depends(require_auth)) -> dict[str, object]:
+    return github_settings_payload(request)
+
+
+@app.put("/api/github")
+def update_github_integration(
+    request: Request,
+    payload: GithubSettingsPayload,
+    _: None = Depends(require_auth),
+) -> dict[str, object]:
+    if payload.token is not None:
+        repo.set_setting(GITHUB_TOKEN_SETTING_KEY, payload.token.strip())
+    if payload.webhook_secret is not None:
+        repo.set_setting(GITHUB_WEBHOOK_SECRET_SETTING_KEY, payload.webhook_secret.strip())
+    if payload.regenerate_webhook_secret:
+        repo.set_setting(GITHUB_WEBHOOK_SECRET_SETTING_KEY, secrets.token_urlsafe(32))
+    return github_settings_payload(request)
+
+
+@app.post("/api/github/import", status_code=201)
+def import_github_repository(
+    payload: GithubImportPayload,
+    _: None = Depends(require_auth),
+) -> dict[str, object]:
+    try:
+        repo_slug = parse_repo_slug(payload.repo_url)
+        branch = validate_branch(payload.branch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    token = repo.get_setting(GITHUB_TOKEN_SETTING_KEY)
+    workdir = Path(tempfile.mkdtemp(prefix="github-import-"))
+    try:
+        snapshot = fetch_snapshot(repo_slug, branch, token, workdir)
+    except GitHubError as exc:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        discovery = discover_apps(snapshot.root)
+        if not discovery.apps:
+            raise HTTPException(status_code=400, detail="仓库中未发现可部署的 Python 文件。")
+        existing = {
+            (app.source_repo.lower(), app.source_path): app
+            for app in repo.list_apps()
+            if app.source_type == "github"
+        }
+        targets: list[tuple[int, str, str]] = []
+        for found in discovery.apps:
+            managed_app = existing.get((repo_slug.lower(), found.path))
+            if managed_app is None:
+                managed_app = repo.create_app(found.name)
+            repo.set_source_origin(
+                managed_app.id,
+                source_repo=repo_slug,
+                source_branch=snapshot.branch,
+                source_path=found.path,
+                source_commit=snapshot.commit,
+            )
+            repo.set_progress(
+                managed_app.id,
+                "queued",
+                5,
+                f"已发现 {found.path}，等待部署...",
+            )
+            targets.append((managed_app.id, found.path, found.entry))
+    except HTTPException:
+        snapshot.cleanup()
+        raise
+    except Exception:
+        snapshot.cleanup()
+        raise
+
+    threading.Thread(
+        target=_deploy_github_targets,
+        args=(
+            snapshot,
+            repo_slug,
+            snapshot.branch,
+            snapshot.commit,
+            targets,
+            payload.manual_dependencies.strip() or None,
+        ),
+        daemon=True,
+    ).start()
+
+    refreshed = [repo.get_app(app_id) for app_id, _, _ in targets]
+    return {
+        "accepted": True,
+        "repo": repo_slug,
+        "branch": snapshot.branch,
+        "commit": snapshot.commit,
+        "warnings": discovery.warnings,
+        "apps": [app_payload(app) for app in refreshed if app is not None],
+    }
+
+
+@app.post("/api/apps/{app_id}/github/deploy")
+def redeploy_github_app(
+    app_id: int,
+    payload: GithubDeployPayload,
+    _: None = Depends(require_auth),
+) -> dict[str, object]:
+    managed_app = get_app_or_404(app_id)
+    if (
+        managed_app.source_type != "github"
+        or not managed_app.source_repo
+        or not managed_app.source_path
+    ):
+        raise HTTPException(status_code=400, detail="当前应用不是从 GitHub 部署的。")
+    try:
+        branch = validate_branch(payload.branch or managed_app.source_branch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    token = repo.get_setting(GITHUB_TOKEN_SETTING_KEY)
+    workdir = Path(tempfile.mkdtemp(prefix="github-deploy-"))
+    try:
+        snapshot = fetch_snapshot(managed_app.source_repo, branch, token, workdir)
+    except GitHubError as exc:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    source = snapshot.root / managed_app.source_path
+    entry = managed_app.script_name or Path(managed_app.source_path).name
+    if not source.exists() or (source.is_dir() and not (source / entry).is_file()):
+        snapshot.cleanup()
+        raise HTTPException(status_code=400, detail="仓库中已找不到对应文件或入口脚本。")
+
+    threading.Thread(
+        target=_deploy_github_targets,
+        args=(
+            snapshot,
+            managed_app.source_repo,
+            snapshot.branch,
+            snapshot.commit,
+            [(app_id, managed_app.source_path, entry)],
+            payload.manual_dependencies,
+        ),
+        daemon=True,
+    ).start()
+    return {
+        "accepted": True,
+        "branch": snapshot.branch,
+        "commit": snapshot.commit,
+    }
+
+
+WEBHOOK_MAX_BYTES = 5 * 1024 * 1024
+
+
+@app.post("/api/github/webhook", include_in_schema=False)
+async def github_webhook(request: Request) -> JSONResponse:
+    secret = repo.get_setting(GITHUB_WEBHOOK_SECRET_SETTING_KEY)
+    if not secret:
+        raise HTTPException(status_code=400, detail="尚未配置 GitHub Webhook 密钥。")
+    body = await request.body()
+    if len(body) > WEBHOOK_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Webhook 负载过大。")
+    expected = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(request.headers.get("X-Hub-Signature-256", ""), expected):
+        raise HTTPException(status_code=401, detail="Webhook 签名校验失败。")
+    if request.headers.get("X-GitHub-Event", "") != "push":
+        return JSONResponse({"ok": True, "ignored": True})
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Webhook 负载不是合法 JSON。") from exc
+
+    ref = str(payload.get("ref", ""))
+    repository = payload.get("repository") or {}
+    full_name = str(repository.get("full_name", ""))
+    commit = str(payload.get("after", ""))
+    if not ref.startswith("refs/heads/") or not full_name:
+        return JSONResponse({"ok": True, "ignored": True})
+
+    branch = ref.removeprefix("refs/heads/")
+    matched = [
+        app
+        for app in repo.list_apps()
+        if app.source_type == "github"
+        and app.source_repo.lower() == full_name.lower()
+        and (not app.source_branch or app.source_branch == branch)
+        and (not commit or app.source_commit != commit)
+    ]
+    if not matched:
+        return JSONResponse({"ok": True, "deployed": []})
+
+    app_ids = [app.id for app in matched]
+    threading.Thread(
+        target=_redeploy_matching_github_apps,
+        args=(full_name, branch, commit, app_ids),
+        daemon=True,
+    ).start()
+    return JSONResponse({"ok": True, "deployed": app_ids}, status_code=202)
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

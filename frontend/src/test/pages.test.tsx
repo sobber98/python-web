@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DashboardPage } from '@/pages/DashboardPage'
+import { GithubPage } from '@/pages/GithubPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import type { ManagedApp } from '@/types'
@@ -20,8 +21,16 @@ const demoApp: ManagedApp = {
   last_error: '',
   progress: { stage: 'installing', percent: 70, message: '正在安装依赖...' },
   dependencies: { inferred: ['requests'], manual: ['requests==2.32.3'] },
+  source: { type: 'upload', repo: '', branch: '', path: '', commit: '' },
   created_at: '2026-01-01 00:00:00',
   updated_at: '2026-01-01 00:00:00',
+}
+
+const githubSettingsPayload = {
+  token_configured: true,
+  token_hint: '****abcd',
+  webhook_secret: 'whsec_demo',
+  webhook_url: 'http://localhost/api/github/webhook',
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -53,6 +62,7 @@ function renderPage(ui: ReactElement, route: string) {
           <Route path="/" element={ui} />
           <Route path="/login" element={ui} />
           <Route path="/settings" element={ui} />
+          <Route path="/github" element={ui} />
           <Route path="/apps/:appId" element={<DashboardPage />} />
         </Routes>
       </MemoryRouter>
@@ -115,7 +125,7 @@ describe('SettingsPage', () => {
   }
 
   it('渲染 pip 镜像源预设', async () => {
-    stubApi({ '/api/settings': settingsPayload })
+    stubApi({ '/api/settings': settingsPayload, '/api/github': githubSettingsPayload })
     renderPage(<SettingsPage />, '/settings')
 
     expect(await screen.findByText('pip 镜像源')).toBeInTheDocument()
@@ -125,7 +135,7 @@ describe('SettingsPage', () => {
   })
 
   it('渲染修改管理员密码表单', async () => {
-    stubApi({ '/api/settings': settingsPayload })
+    stubApi({ '/api/settings': settingsPayload, '/api/github': githubSettingsPayload })
     renderPage(<SettingsPage />, '/settings')
 
     expect(await screen.findByText('修改管理员密码')).toBeInTheDocument()
@@ -133,5 +143,30 @@ describe('SettingsPage', () => {
     expect(screen.getByLabelText(/^新密码/)).toBeInTheDocument()
     expect(screen.getByLabelText('确认新密码')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /更新密码/ })).toBeInTheDocument()
+  })
+
+  it('渲染 GitHub 集成设置', async () => {
+    stubApi({ '/api/settings': settingsPayload, '/api/github': githubSettingsPayload })
+    renderPage(<SettingsPage />, '/settings')
+
+    expect(await screen.findByText('GitHub 集成')).toBeInTheDocument()
+    expect(await screen.findByLabelText(/^GitHub Token/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Webhook 地址/)).toHaveValue(
+      'http://localhost/api/github/webhook',
+    )
+    expect(screen.getByRole('button', { name: /保存 GitHub 设置/ })).toBeInTheDocument()
+  })
+})
+
+describe('GithubPage', () => {
+  it('渲染仓库导入表单与目录约定', async () => {
+    stubApi({ '/api/github': githubSettingsPayload })
+    renderPage(<GithubPage />, '/github')
+
+    expect(screen.getByRole('heading', { name: 'GitHub 部署' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^仓库地址/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^分支/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /拉取并部署/ })).toBeInTheDocument()
+    expect(await screen.findByText('目录约定')).toBeInTheDocument()
   })
 })

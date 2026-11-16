@@ -9,6 +9,7 @@ export const queryKeys = {
   apps: ['apps'] as const,
   logs: (appId: number) => ['apps', appId, 'logs'] as const,
   settings: ['settings'] as const,
+  github: ['github'] as const,
 }
 
 export function useSession() {
@@ -112,6 +113,61 @@ export function useChangePassword() {
       currentPassword: string
       newPassword: string
     }) => api.changePassword(currentPassword, newPassword),
+  })
+}
+
+export function useGithubSettings() {
+  return useQuery({
+    queryKey: queryKeys.github,
+    queryFn: api.githubSettings,
+  })
+}
+
+export function useSaveGithubSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: {
+      token?: string
+      webhook_secret?: string
+      regenerate_webhook_secret?: boolean
+    }) => api.saveGithubSettings(payload),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(queryKeys.github, settings)
+    },
+  })
+}
+
+export function useImportGithubRepo() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      repoUrl,
+      branch,
+      manualDependencies,
+    }: {
+      repoUrl: string
+      branch: string
+      manualDependencies: string
+    }) => api.importGithubRepo(repoUrl, branch, manualDependencies),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.apps })
+    },
+  })
+}
+
+export function useGithubRedeploy() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      appId,
+      manualDependencies,
+    }: {
+      appId: number
+      manualDependencies?: string
+    }) => api.redeployGithub(appId, manualDependencies),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.apps })
+    },
   })
 }
 
