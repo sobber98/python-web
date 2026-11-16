@@ -8,6 +8,7 @@ from pathlib import Path
 
 KNOWN_IMPORT_TO_PACKAGE = {
     "bs4": "beautifulsoup4",
+    "Crypto": "pycryptodome",
     "cv2": "opencv-python",
     "dotenv": "python-dotenv",
     "PIL": "Pillow",

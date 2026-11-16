@@ -7,11 +7,11 @@ def test_infer_dependencies_skips_stdlib_and_local_modules(tmp_path: Path) -> No
     (tmp_path / "local_tool.py").write_text("VALUE = 1\n", encoding="utf-8")
     script = tmp_path / "main.py"
     script.write_text(
-        "import os\nimport requests\nimport local_tool\nfrom bs4 import BeautifulSoup\nfrom pathlib import Path\n",
+        "import os\nimport requests\nimport local_tool\nfrom bs4 import BeautifulSoup\nfrom Crypto.Hash import MD5\nfrom pathlib import Path\n",
         encoding="utf-8",
     )
 
-    assert infer_dependencies(script) == ["beautifulsoup4", "requests"]
+    assert infer_dependencies(script) == ["pycryptodome", "beautifulsoup4", "requests"]
 
 
 def test_parse_manual_dependencies_ignores_blank_lines_and_comments() -> None:
